@@ -3,7 +3,9 @@ import "react-native-gesture-handler";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
   AppState,
+  Easing,
   Image,
   LayoutAnimation,
   Modal,
@@ -64,6 +66,24 @@ type Wallet = {
   lockedName?: boolean;
 };
 
+type Budget = {
+  id: string;
+  categoryId: string;
+  monthlyLimit: number;
+  warnAt: number;
+};
+
+type RecurringTransaction = {
+  id: string;
+  type: TransactionType;
+  amount: number;
+  categoryId: string;
+  note: string;
+  walletId: string;
+  dayOfMonth: number;
+  enabled: boolean;
+};
+
 type AppData = {
   profile: {
     name: string;
@@ -72,6 +92,8 @@ type AppData = {
   categories: Category[];
   transactions: Transaction[];
   wallets: Wallet[];
+  budgets: Budget[];
+  recurringTransactions: RecurringTransaction[];
   currency: string;
   requirePinOnResume: boolean;
   isPremium: boolean;
@@ -90,6 +112,8 @@ type RootStackParamList = {
   TodayTransactions: undefined;
   Search: undefined;
   CurrencyConverter: undefined;
+  Budgets: undefined;
+  RecurringTransactions: undefined;
 };
 
 type TabParamList = {
@@ -212,6 +236,45 @@ const DEFAULT_TRANSACTIONS: Transaction[] = [
   createTransaction("expense", 3200000, "c4", "Thanh toán tiền nhà", offsetDate(-11), "Ngân hàng", []),
 ];
 
+const DEFAULT_BUDGETS: Budget[] = [
+  { id: "b_food", categoryId: "c1", monthlyLimit: 4500000, warnAt: 0.8 },
+  { id: "b_transport", categoryId: "c3", monthlyLimit: 1800000, warnAt: 0.8 },
+  { id: "b_entertainment", categoryId: "c5", monthlyLimit: 1500000, warnAt: 0.8 },
+];
+
+const DEFAULT_RECURRING: RecurringTransaction[] = [
+  {
+    id: "r_salary",
+    type: "income",
+    amount: 18500000,
+    categoryId: "c7",
+    note: "Lương hằng tháng",
+    walletId: "bank",
+    dayOfMonth: 5,
+    enabled: true,
+  },
+  {
+    id: "r_rent",
+    type: "expense",
+    amount: 3200000,
+    categoryId: "c4",
+    note: "Tiền nhà hằng tháng",
+    walletId: "bank",
+    dayOfMonth: 1,
+    enabled: true,
+  },
+  {
+    id: "r_internet",
+    type: "expense",
+    amount: 250000,
+    categoryId: "c6",
+    note: "Internet hằng tháng",
+    walletId: "bank",
+    dayOfMonth: 10,
+    enabled: true,
+  },
+];
+
 const INITIAL_DATA: AppData = {
   profile: {
     name: "Nguyễn Văn A",
@@ -220,6 +283,8 @@ const INITIAL_DATA: AppData = {
   categories: DEFAULT_CATEGORIES,
   transactions: DEFAULT_TRANSACTIONS,
   wallets: DEFAULT_WALLETS,
+  budgets: DEFAULT_BUDGETS,
+  recurringTransactions: DEFAULT_RECURRING,
   currency: "VND",
   requirePinOnResume: false,
   isPremium: false,
@@ -251,7 +316,7 @@ export default function App() {
         const saved = await AsyncStorage.getItem(STORAGE_KEY);
         const savedPin = await SecureStore.getItemAsync(PIN_KEY);
 
-        const nextData = saved ? normalizeData(JSON.parse(saved) as Partial<AppData>) : INITIAL_DATA;
+        const nextData = applyRecurringTransactions(saved ? normalizeData(JSON.parse(saved) as Partial<AppData>) : INITIAL_DATA);
         setData(nextData);
 
         if (savedPin && nextData.requirePinOnResume) {
@@ -398,6 +463,58 @@ export default function App() {
     setData((current) => ({
       ...current,
       wallets: current.wallets.filter((item) => item.id !== walletId),
+    }));
+  };
+
+  const saveBudget = (input: Omit<Budget, "id"> & { id?: string }) => {
+    const next: Budget = {
+      ...input,
+      id: input.id ?? `budget_${Date.now()}_${Math.round(Math.random() * 1000)}`,
+    };
+
+    animateNext();
+    setData((current) => {
+      const exists = current.budgets.some((item) => item.id === next.id);
+      return {
+        ...current,
+        budgets: exists
+          ? current.budgets.map((item) => (item.id === next.id ? next : item))
+          : [...current.budgets.filter((item) => item.categoryId !== next.categoryId), next],
+      };
+    });
+  };
+
+  const deleteBudget = (budgetId: string) => {
+    animateNext();
+    setData((current) => ({
+      ...current,
+      budgets: current.budgets.filter((item) => item.id !== budgetId),
+    }));
+  };
+
+  const saveRecurring = (input: Omit<RecurringTransaction, "id"> & { id?: string }) => {
+    const next: RecurringTransaction = {
+      ...input,
+      id: input.id ?? `recurring_${Date.now()}_${Math.round(Math.random() * 1000)}`,
+    };
+
+    animateNext();
+    setData((current) => {
+      const exists = current.recurringTransactions.some((item) => item.id === next.id);
+      return applyRecurringTransactions({
+        ...current,
+        recurringTransactions: exists
+          ? current.recurringTransactions.map((item) => (item.id === next.id ? next : item))
+          : [...current.recurringTransactions, next],
+      });
+    });
+  };
+
+  const deleteRecurring = (recurringId: string) => {
+    animateNext();
+    setData((current) => ({
+      ...current,
+      recurringTransactions: current.recurringTransactions.filter((item) => item.id !== recurringId),
     }));
   };
 
@@ -588,6 +705,26 @@ export default function App() {
               {(props) => (
                 <CurrencyConverterScreen
                   {...props}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Budgets">
+              {(props) => (
+                <BudgetsScreen
+                  {...props}
+                  data={data}
+                  saveBudget={saveBudget}
+                  deleteBudget={deleteBudget}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="RecurringTransactions">
+              {(props) => (
+                <RecurringTransactionsScreen
+                  {...props}
+                  data={data}
+                  saveRecurring={saveRecurring}
+                  deleteRecurring={deleteRecurring}
                 />
               )}
             </Stack.Screen>
@@ -1070,6 +1207,8 @@ function MoreScreen({
       <GlassCard>
         <SettingsRow label="Quản lý danh mục" icon="grid" onPress={() => navigation.navigate("Categories")} />
         <SettingsRow label="Quản lý ví" icon="wallet" onPress={() => navigation.navigate("Wallets")} />
+        <SettingsRow label="Ngân sách danh mục" icon="speedometer" onPress={() => navigation.navigate("Budgets")} />
+        <SettingsRow label="Giao dịch định kỳ" icon="repeat" onPress={() => navigation.navigate("RecurringTransactions")} />
         <SettingsRow label="Đổi mã PIN 4 số" icon="lock-closed" onPress={() => navigation.navigate("ChangePin")} />
         <SettingsRow label="Chuyển đổi tiền tệ" icon="swap-horizontal" onPress={() => navigation.navigate("CurrencyConverter")} />
         <SettingsToggle
@@ -1495,6 +1634,236 @@ function CurrencyConverterScreen({
   return (
     <Screen title="Chuyển đổi tiền tệ" subtitle="Tỉ giá tham khảo theo ngày" profile={{ name: "", initials: "" }}>
       <CurrencyConverterCard />
+      <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
+        <Text style={styles.secondaryActionText}>Quay lại</Text>
+      </Pressable>
+    </Screen>
+  );
+}
+
+function BudgetsScreen({
+  navigation,
+  data,
+  saveBudget,
+  deleteBudget,
+}: NativeStackScreenProps<RootStackParamList, "Budgets"> & {
+  data: AppData;
+  saveBudget: (payload: Omit<Budget, "id"> & { id?: string }) => void;
+  deleteBudget: (budgetId: string) => void;
+}) {
+  const expenseCategories = data.categories.filter((item) => item.type === "expense");
+  const [editing, setEditing] = useState<Budget | null>(null);
+  const [categoryId, setCategoryId] = useState(expenseCategories[0]?.id ?? "");
+  const [limit, setLimit] = useState("");
+  const [warnAt, setWarnAt] = useState("80");
+  const usages = getBudgetUsages(data.transactions, data.budgets);
+
+  const beginEdit = (budget?: Budget) => {
+    setEditing(budget ?? null);
+    setCategoryId(budget?.categoryId ?? expenseCategories[0]?.id ?? "");
+    setLimit(budget ? String(budget.monthlyLimit) : "");
+    setWarnAt(budget ? String(Math.round(budget.warnAt * 100)) : "80");
+  };
+
+  return (
+    <Screen title="Ngân sách" subtitle="Cảnh báo khi gần vượt hạn mức" profile={{ name: "", initials: "" }}>
+      <GlassCard>
+        <Text style={styles.cardTitle}>{editing ? "Sửa ngân sách" : "Thêm ngân sách"}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.categoryChoices}>
+            {expenseCategories.map((item) => (
+              <Pressable
+                key={item.id}
+                style={[styles.categoryChoice, categoryId === item.id && styles.categoryChoiceActive]}
+                onPress={() => setCategoryId(item.id)}
+              >
+                <CategoryIcon category={item} compact active={categoryId === item.id} />
+                <Text style={[styles.categoryChoiceText, categoryId === item.id && styles.categoryChoiceTextActive]}>{item.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+        <TextInput
+          value={limit}
+          onChangeText={(text) => setLimit(text.replace(/[^\d]/g, ""))}
+          keyboardType="number-pad"
+          placeholder="Hạn mức tháng"
+          placeholderTextColor={COLORS.muted}
+          style={styles.input}
+        />
+        <TextInput
+          value={warnAt}
+          onChangeText={(text) => setWarnAt(text.replace(/[^\d]/g, "").slice(0, 3))}
+          keyboardType="number-pad"
+          placeholder="Cảnh báo ở %"
+          placeholderTextColor={COLORS.muted}
+          style={styles.input}
+        />
+        <Pressable
+          style={styles.primaryAction}
+          onPress={() => {
+            const parsedLimit = Number(limit);
+            const parsedWarn = Number(warnAt);
+            if (!categoryId || !parsedLimit) {
+              Alert.alert("Thiếu dữ liệu", "Chọn danh mục và nhập hạn mức.");
+              return;
+            }
+            saveBudget({
+              id: editing?.id,
+              categoryId,
+              monthlyLimit: parsedLimit,
+              warnAt: Math.min(Math.max(parsedWarn || 80, 1), 100) / 100,
+            });
+            beginEdit();
+          }}
+        >
+          <Text style={styles.primaryActionText}>{editing ? "Lưu ngân sách" : "Thêm ngân sách"}</Text>
+        </Pressable>
+      </GlassCard>
+
+      <GlassCard>
+        <Text style={styles.cardTitle}>Hạn mức tháng này</Text>
+        {data.budgets.map((budget) => {
+          const category = data.categories.find((item) => item.id === budget.categoryId);
+          const used = usages[budget.id] ?? 0;
+          const percent = budget.monthlyLimit ? used / budget.monthlyLimit : 0;
+          const warn = percent >= budget.warnAt;
+          return (
+            <Pressable key={budget.id} style={styles.budgetRow} onPress={() => beginEdit(budget)}>
+              <View style={styles.transactionTextBlock}>
+                <Text style={styles.transactionTitle}>{category?.name ?? "Danh mục"}</Text>
+                <Text style={[styles.transactionMeta, warn && { color: COLORS.expense }]}>
+                  Đã dùng {formatCurrency(used)} / {formatCurrency(budget.monthlyLimit)} ({Math.round(percent * 100)}%)
+                </Text>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${Math.min(percent, 1) * 100}%`, backgroundColor: warn ? COLORS.expense : COLORS.success }]} />
+                </View>
+              </View>
+              <Pressable onPress={() => deleteBudget(budget.id)}>
+                <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+              </Pressable>
+            </Pressable>
+          );
+        })}
+      </GlassCard>
+
+      <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
+        <Text style={styles.secondaryActionText}>Quay lại</Text>
+      </Pressable>
+    </Screen>
+  );
+}
+
+function RecurringTransactionsScreen({
+  navigation,
+  data,
+  saveRecurring,
+  deleteRecurring,
+}: NativeStackScreenProps<RootStackParamList, "RecurringTransactions"> & {
+  data: AppData;
+  saveRecurring: (payload: Omit<RecurringTransaction, "id"> & { id?: string }) => void;
+  deleteRecurring: (recurringId: string) => void;
+}) {
+  const [editing, setEditing] = useState<RecurringTransaction | null>(null);
+  const [type, setType] = useState<TransactionType>("expense");
+  const [amount, setAmount] = useState("");
+  const [categoryId, setCategoryId] = useState(data.categories.find((item) => item.type === "expense")?.id ?? "");
+  const [walletId, setWalletId] = useState(data.wallets[0]?.id ?? "cash");
+  const [day, setDay] = useState("1");
+  const [note, setNote] = useState("");
+
+  const categories = data.categories.filter((item) => item.type === type);
+  const beginEdit = (item?: RecurringTransaction) => {
+    setEditing(item ?? null);
+    setType(item?.type ?? "expense");
+    setAmount(item ? String(item.amount) : "");
+    setCategoryId(item?.categoryId ?? data.categories.find((category) => category.type === (item?.type ?? "expense"))?.id ?? "");
+    setWalletId(item?.walletId ?? data.wallets[0]?.id ?? "cash");
+    setDay(item ? String(item.dayOfMonth) : "1");
+    setNote(item?.note ?? "");
+  };
+
+  useEffect(() => {
+    if (!categories.some((item) => item.id === categoryId)) {
+      setCategoryId(categories[0]?.id ?? "");
+    }
+  }, [categories, categoryId]);
+
+  return (
+    <Screen title="Giao dịch định kỳ" subtitle="Tự tạo giao dịch mỗi tháng" profile={{ name: "", initials: "" }}>
+      <GlassCard>
+        <Text style={styles.cardTitle}>{editing ? "Sửa định kỳ" : "Thêm định kỳ"}</Text>
+        <View style={styles.segment}>
+          <SegmentButton label="Chi tiêu" active={type === "expense"} onPress={() => setType("expense")} />
+          <SegmentButton label="Thu nhập" active={type === "income"} onPress={() => setType("income")} />
+        </View>
+        <TextInput value={amount} onChangeText={(text) => setAmount(text.replace(/[^\d]/g, ""))} keyboardType="number-pad" placeholder="Số tiền" placeholderTextColor={COLORS.muted} style={styles.input} />
+        <TextInput value={day} onChangeText={(text) => setDay(text.replace(/[^\d]/g, "").slice(0, 2))} keyboardType="number-pad" placeholder="Ngày trong tháng" placeholderTextColor={COLORS.muted} style={styles.input} />
+        <TextInput value={note} onChangeText={setNote} placeholder="Ghi chú" placeholderTextColor={COLORS.muted} style={styles.input} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.categoryChoices}>
+            {categories.map((item) => (
+              <Pressable key={item.id} style={[styles.categoryChoice, categoryId === item.id && styles.categoryChoiceActive]} onPress={() => setCategoryId(item.id)}>
+                <CategoryIcon category={item} compact active={categoryId === item.id} />
+                <Text style={[styles.categoryChoiceText, categoryId === item.id && styles.categoryChoiceTextActive]}>{item.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+        <View style={styles.accountRow}>
+          {data.wallets.map((wallet) => (
+            <Pressable key={wallet.id} style={[styles.accountChip, walletId === wallet.id && styles.accountChipActive]} onPress={() => setWalletId(wallet.id)}>
+              <Text style={[styles.accountChipText, walletId === wallet.id && styles.accountChipTextActive]}>{wallet.name}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Pressable
+          style={styles.primaryAction}
+          onPress={() => {
+            const parsedAmount = Number(amount);
+            const parsedDay = Math.min(Math.max(Number(day) || 1, 1), 28);
+            if (!parsedAmount || !categoryId || !walletId) {
+              Alert.alert("Thiếu dữ liệu", "Nhập đủ số tiền, ví và danh mục.");
+              return;
+            }
+            saveRecurring({
+              id: editing?.id,
+              type,
+              amount: parsedAmount,
+              categoryId,
+              walletId,
+              dayOfMonth: parsedDay,
+              note: note.trim() || "Giao dịch định kỳ",
+              enabled: true,
+            });
+            beginEdit();
+          }}
+        >
+          <Text style={styles.primaryActionText}>{editing ? "Lưu định kỳ" : "Thêm định kỳ"}</Text>
+        </Pressable>
+      </GlassCard>
+
+      <GlassCard>
+        <Text style={styles.cardTitle}>Đang hoạt động</Text>
+        {data.recurringTransactions.map((item) => {
+          const category = data.categories.find((categoryItem) => categoryItem.id === item.categoryId);
+          return (
+            <Pressable key={item.id} style={styles.budgetRow} onPress={() => beginEdit(item)}>
+              <CategoryIcon category={category} />
+              <View style={styles.transactionTextBlock}>
+                <Text style={styles.transactionTitle}>{item.note}</Text>
+                <Text style={styles.transactionMeta}>
+                  Ngày {item.dayOfMonth} mỗi tháng · {item.type === "income" ? "+" : "-"}{formatCurrency(item.amount)}
+                </Text>
+              </View>
+              <Pressable onPress={() => deleteRecurring(item.id)}>
+                <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+              </Pressable>
+            </Pressable>
+          );
+        })}
+      </GlassCard>
+
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
         <Text style={styles.secondaryActionText}>Quay lại</Text>
       </Pressable>
@@ -2237,11 +2606,31 @@ function TabIcon({
   color: string;
   focused: boolean;
 }) {
+  const progress = useRef(new Animated.Value(focused ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: focused ? 1 : 0,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [focused, progress]);
+
+  const scale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.08],
+  });
+  const translateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -2],
+  });
+
   return (
-    <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive]}>
+    <Animated.View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive, { transform: [{ scale }, { translateY }] }]}>
       <Ionicons name={icon} size={18} color={color} />
       <Text style={[styles.tabLabel, { color }]}>{label}</Text>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -2389,10 +2778,49 @@ function normalizeData(input: Partial<AppData>): AppData {
     categories: input.categories?.length ? input.categories : INITIAL_DATA.categories,
     transactions: sortTransactions(input.transactions?.length ? input.transactions : INITIAL_DATA.transactions),
     wallets: input.wallets?.length ? input.wallets : INITIAL_DATA.wallets,
+    budgets: input.budgets?.length ? input.budgets : INITIAL_DATA.budgets,
+    recurringTransactions: input.recurringTransactions?.length ? input.recurringTransactions : INITIAL_DATA.recurringTransactions,
     currency: input.currency ?? "VND",
     requirePinOnResume: input.requirePinOnResume ?? false,
     isPremium: input.isPremium ?? false,
     themeMode: input.themeMode ?? "dark",
+  };
+}
+
+function applyRecurringTransactions(data: AppData): AppData {
+  const now = TODAY;
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  let nextTransactions = [...data.transactions];
+  let nextWallets = [...data.wallets];
+
+  data.recurringTransactions
+    .filter((item) => item.enabled)
+    .forEach((item) => {
+      const recurringTag = `[recurring:${item.id}:${monthKey}]`;
+      const exists = nextTransactions.some((transaction) => transaction.note.includes(recurringTag));
+      if (exists) {
+        return;
+      }
+
+      const date = new Date(now.getFullYear(), now.getMonth(), Math.min(item.dayOfMonth, 28), 7, 0, 0);
+      const transaction: Transaction = {
+        id: `tx_${item.id}_${monthKey}`,
+        type: item.type,
+        amount: item.amount,
+        categoryId: item.categoryId,
+        note: `${item.note} ${recurringTag}`,
+        date: date.toISOString(),
+        account: item.walletId,
+        images: [],
+      };
+      nextWallets = applyWalletChanges(nextWallets, undefined, transaction);
+      nextTransactions = [transaction, ...nextTransactions];
+    });
+
+  return {
+    ...data,
+    wallets: nextWallets,
+    transactions: sortTransactions(nextTransactions),
   };
 }
 
@@ -2414,6 +2842,22 @@ function sumByType(transactions: Transaction[], type: TransactionType) {
   return transactions
     .filter((item) => item.type === type)
     .reduce((sum, item) => sum + item.amount, 0);
+}
+
+function getBudgetUsages(transactions: Transaction[], budgets: Budget[]) {
+  return Object.fromEntries(
+    budgets.map((budget) => [
+      budget.id,
+      transactions
+        .filter(
+          (item) =>
+            item.type === "expense" &&
+            item.categoryId === budget.categoryId &&
+            sameMonth(new Date(item.date), TODAY)
+        )
+        .reduce((sum, item) => sum + item.amount, 0),
+    ])
+  );
 }
 
 function formatCurrency(value: number) {
@@ -3389,6 +3833,26 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.05)",
+  },
+  budgetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.05)",
+  },
+  progressTrack: {
+    height: 7,
+    borderRadius: 7,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginTop: 8,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 7,
   },
   walletRight: {
     alignItems: "flex-end",
