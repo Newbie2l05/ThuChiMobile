@@ -34,6 +34,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as ImagePicker from "expo-image-picker";
+import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 
 type TransactionType = "expense" | "income";
@@ -82,6 +83,14 @@ type RecurringTransaction = {
   enabled: boolean;
 };
 
+type ReminderSettings = {
+  enabled: boolean;
+  hour: number;
+  minute: number;
+  weekdays: number[];
+  notificationIds: string[];
+};
+
 type AppData = {
   profile: {
     name: string;
@@ -92,6 +101,7 @@ type AppData = {
   wallets: Wallet[];
   budgets: Budget[];
   recurringTransactions: RecurringTransaction[];
+  reminderSettings: ReminderSettings;
   currency: string;
   language: "vi" | "en";
   requirePinOnResume: boolean;
@@ -109,11 +119,12 @@ type RootStackParamList = {
   SpendingTrend: undefined;
   YearStats: undefined;
   TodayTransactions: undefined;
-  MonthTransactions: { categoryId?: string } | undefined;
+  MonthTransactions: { categoryId?: string; type?: TransactionType } | undefined;
   Search: undefined;
   CurrencyConverter: undefined;
   Budgets: undefined;
   RecurringTransactions: undefined;
+  ReminderSettings: undefined;
 };
 
 type TabParamList = {
@@ -293,6 +304,14 @@ const DEFAULT_RECURRING: RecurringTransaction[] = [
   },
 ];
 
+const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
+  enabled: false,
+  hour: 20,
+  minute: 0,
+  weekdays: [1, 2, 3, 4, 5, 6, 7],
+  notificationIds: [],
+};
+
 const INITIAL_DATA: AppData = {
   profile: {
     name: "Nguyễn Văn A",
@@ -303,6 +322,7 @@ const INITIAL_DATA: AppData = {
   wallets: DEFAULT_WALLETS,
   budgets: DEFAULT_BUDGETS,
   recurringTransactions: DEFAULT_RECURRING,
+  reminderSettings: DEFAULT_REMINDER_SETTINGS,
   currency: "VND",
   language: "vi",
   requirePinOnResume: false,
@@ -312,6 +332,16 @@ const INITIAL_DATA: AppData = {
 
 const Tab = createBottomTabNavigator<TabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 if (Platform.OS === "android") {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -766,6 +796,15 @@ export default function App() {
                 />
               )}
             </Stack.Screen>
+            <Stack.Screen name="ReminderSettings">
+              {(props) => (
+                <ReminderSettingsScreen
+                  {...props}
+                  data={data}
+                  setData={setData}
+                />
+              )}
+            </Stack.Screen>
             <Stack.Screen name="ChangePin">
               {(props) => (
                 <ChangePinScreen
@@ -941,10 +980,10 @@ function OverviewScreen({
       </GlassCard>
 
       <View style={styles.statsGrid}>
-        <Pressable style={styles.flex} onPress={() => navigation.navigate("MonthTransactions")}>
+        <Pressable style={styles.flex} onPress={() => navigation.navigate("MonthTransactions", { type: "income" })}>
           <MetricCard label="Thu nhập tháng" value={formatCurrency(sumByType(monthTransactions, "income"))} accent={COLORS.income} icon="arrow-down" />
         </Pressable>
-        <Pressable style={styles.flex} onPress={() => navigation.navigate("MonthTransactions")}>
+        <Pressable style={styles.flex} onPress={() => navigation.navigate("MonthTransactions", { type: "expense" })}>
           <MetricCard label="Chi tiêu tháng" value={formatCurrency(sumByType(monthTransactions, "expense"))} accent={COLORS.expense} icon="arrow-up" />
         </Pressable>
       </View>
@@ -1019,6 +1058,7 @@ function CalendarScreen({
   const [selectedDate, setSelectedDate] = useState(startOfDay(TODAY));
   const [monthCursor, setMonthCursor] = useState(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1));
   const [yearPickerOpen, setYearPickerOpen] = useState(false);
+  const lastDayTapRef = useRef<{ key: string; time: number } | null>(null);
 
   const days = buildCalendar(monthCursor, data.transactions);
   const selectedKey = isoDate(selectedDate);
@@ -1036,6 +1076,18 @@ function CalendarScreen({
       { text: "Thu nhập", onPress: () => navigation.navigate("TransactionEditor", { defaultType: "income", defaultDate }) },
       { text: "Hủy", style: "cancel" },
     ]);
+  };
+  const handleDayPress = (date: Date) => {
+    const key = isoDate(date);
+    const now = Date.now();
+    const previous = lastDayTapRef.current;
+    setSelectedDate(date);
+    if (previous?.key === key && now - previous.time < 420) {
+      navigation.navigate("TransactionEditor", { defaultDate: key });
+      lastDayTapRef.current = null;
+      return;
+    }
+    lastDayTapRef.current = { key, time: now };
   };
 
   return (
@@ -1062,7 +1114,7 @@ function CalendarScreen({
               <Pressable
                 key={day.date.toISOString()}
                 style={[styles.dayCell, active && styles.dayCellActive]}
-                onPress={() => setSelectedDate(day.date)}
+                onPress={() => handleDayPress(day.date)}
                 onLongPress={() => addTransactionForDate(day.date)}
               >
                 <Text style={[styles.dayLabel, active && styles.dayLabelActive]}>
@@ -1343,6 +1395,7 @@ function MoreScreen({
         <SettingsRow label={t("Quản lý ví")} icon="wallet" onPress={() => navigation.navigate("Wallets")} />
         <SettingsRow label={t("Ngân sách danh mục")} icon="speedometer" onPress={() => navigation.navigate("Budgets")} />
         <SettingsRow label={t("Giao dịch định kỳ")} icon="repeat" onPress={() => navigation.navigate("RecurringTransactions")} />
+        <SettingsRow label={t("Nhắc nhập thu chi")} icon="alarm" onPress={() => navigation.navigate("ReminderSettings")} />
         <SettingsRow label={t("Đổi mã PIN 4 số")} icon="lock-closed" onPress={() => navigation.navigate("ChangePin")} />
         <SettingsRow label={t("Chuyển đổi tiền tệ")} icon="swap-horizontal" onPress={() => navigation.navigate("CurrencyConverter")} />
         
@@ -1785,11 +1838,19 @@ function MonthTransactionsScreen({
   const styles = useAppStyles();
   const COLORS = useAppColors();
   const categoryId = route.params?.categoryId;
-  const monthItems = data.transactions.filter((item) => sameMonth(new Date(item.date), TODAY) && (!categoryId || item.categoryId === categoryId));
+  const type = route.params?.type;
+  const monthItems = data.transactions.filter((item) => sameMonth(new Date(item.date), TODAY) && (!categoryId || item.categoryId === categoryId) && (!type || item.type === type));
   const categoryName = categoryId ? categoriesById[categoryId]?.name : null;
+  const title = categoryName
+    ? `Chi tiêu: ${categoryName}`
+    : type === "income"
+      ? "Thu nhập tháng này"
+      : type === "expense"
+        ? "Chi tiêu tháng này"
+        : "Thu chi tháng này";
 
   return (
-    <Screen title={categoryName ? `Chi tiêu: ${categoryName}` : "Thu chi tháng này"} subtitle={monthLabel(TODAY)} profile={{ name: "", initials: "" }}>
+    <Screen title={title} subtitle={monthLabel(TODAY)} profile={{ name: "", initials: "" }}>
       <GlassCard>
         {monthItems.length === 0 ? (
           <Text style={styles.emptyText}>{t("Tháng này chưa có giao dịch.")}</Text>
@@ -2113,6 +2174,109 @@ function RecurringTransactionsScreen({
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
         <Text style={styles.secondaryActionText}>{t("Quay lại")}</Text>
       </Pressable>
+    </Screen>
+  );
+}
+
+const WEEKDAY_OPTIONS = [
+  { value: 2, label: "T2" },
+  { value: 3, label: "T3" },
+  { value: 4, label: "T4" },
+  { value: 5, label: "T5" },
+  { value: 6, label: "T6" },
+  { value: 7, label: "T7" },
+  { value: 1, label: "CN" },
+];
+
+function ReminderSettingsScreen({
+  navigation,
+  data,
+  setData,
+}: NativeStackScreenProps<RootStackParamList, "ReminderSettings"> & {
+  data: AppData;
+  setData: React.Dispatch<React.SetStateAction<AppData>>;
+}) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
+  const current = data.reminderSettings ?? DEFAULT_REMINDER_SETTINGS;
+  const [enabled, setEnabled] = useState(current.enabled);
+  const [hour, setHour] = useState(String(current.hour).padStart(2, "0"));
+  const [minute, setMinute] = useState(String(current.minute).padStart(2, "0"));
+  const [weekdays, setWeekdays] = useState<number[]>(current.weekdays.length ? current.weekdays : DEFAULT_REMINDER_SETTINGS.weekdays);
+
+  const toggleWeekday = (weekday: number) => {
+    setWeekdays((items) => {
+      const exists = items.includes(weekday);
+      const next = exists ? items.filter((item) => item !== weekday) : [...items, weekday];
+      return next.length ? next : [weekday];
+    });
+  };
+
+  const save = async () => {
+    const parsedHour = Number(hour);
+    const parsedMinute = Number(minute);
+    if (!Number.isInteger(parsedHour) || parsedHour < 0 || parsedHour > 23 || !Number.isInteger(parsedMinute) || parsedMinute < 0 || parsedMinute > 59) {
+      Alert.alert("Giờ chưa hợp lệ", "Nhập giờ từ 00-23 và phút từ 00-59.");
+      return;
+    }
+
+    const nextBase: ReminderSettings = {
+      enabled,
+      hour: parsedHour,
+      minute: parsedMinute,
+      weekdays,
+      notificationIds: current.notificationIds ?? [],
+    };
+    const next = await scheduleReminderNotifications(nextBase);
+    animateNext();
+    setData((appData) => ({ ...appData, reminderSettings: next }));
+    Alert.alert("Đã lưu nhắc nhở", enabled ? "App sẽ nhắc bạn nhập thu chi theo lịch đã chọn." : "Đã tắt nhắc nhập thu chi.");
+    navigation.goBack();
+  };
+
+  return (
+    <Screen title={t("Nhắc nhập thu chi")} subtitle="Hẹn giờ giống báo thức để không quên ghi giao dịch" profile={data.profile}>
+      <GlassCard>
+        <SettingsToggle label="Bật nhắc nhở" icon="notifications" value={enabled} onValueChange={setEnabled} />
+        <Text style={styles.cardTitle}>Giờ nhắc</Text>
+        <View style={styles.currencyRow}>
+          <TextInput
+            value={hour}
+            onChangeText={(text) => setHour(text.replace(/\D/g, "").slice(0, 2))}
+            keyboardType="number-pad"
+            placeholder="20"
+            placeholderTextColor={COLORS.muted}
+            style={[styles.input, styles.timeInput]}
+          />
+          <Text style={styles.cardTitle}>:</Text>
+          <TextInput
+            value={minute}
+            onChangeText={(text) => setMinute(text.replace(/\D/g, "").slice(0, 2))}
+            keyboardType="number-pad"
+            placeholder="00"
+            placeholderTextColor={COLORS.muted}
+            style={[styles.input, styles.timeInput]}
+          />
+        </View>
+        <Text style={styles.cardTitle}>Chọn ngày trong tuần</Text>
+        <View style={styles.weekdayPicker}>
+          {WEEKDAY_OPTIONS.map((item) => {
+            const active = weekdays.includes(item.value);
+            return (
+              <Pressable key={item.value} style={[styles.weekdayChip, active && styles.weekdayChipActive]} onPress={() => toggleWeekday(item.value)}>
+                <Text style={[styles.weekdayChipText, active && styles.weekdayChipTextActive]}>{item.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Pressable style={styles.secondaryAction} onPress={() => setWeekdays(WEEKDAY_OPTIONS.map((item) => item.value))}>
+          <Text style={styles.secondaryActionText}>Chọn cả 7 ngày</Text>
+        </Pressable>
+        <Pressable style={styles.primaryAction} onPress={() => void save()}>
+          <Ionicons name="alarm" size={18} color="#07162F" />
+          <Text style={styles.primaryActionText}>Lưu lịch nhắc</Text>
+        </Pressable>
+      </GlassCard>
     </Screen>
   );
 }
@@ -2723,8 +2887,8 @@ function Screen({
           </Pressable>
         )}
         <View style={styles.headerTextWrap}>
-          <Text style={styles.headerSubtitle}>{subtitle}</Text>
-          <Text style={styles.headerTitle}>{title}</Text>
+          <Text style={styles.headerSubtitle}>{t(subtitle)}</Text>
+          <Text style={styles.headerTitle}>{t(title)}</Text>
         </View>
         <Pressable style={styles.headerSearchButton} onPress={() => navigation.navigate("Search")}>
           <Ionicons name="search" size={20} color={COLORS.text} />
@@ -2784,7 +2948,7 @@ function MetricCard({
       <View style={[styles.metricIcon, { backgroundColor: `${accent}22` }]}>
         <Ionicons name={icon} size={18} color={accent} />
       </View>
-      <Text style={styles.transactionMeta}>{label}</Text>
+      <Text style={styles.transactionMeta}>{t(label)}</Text>
       <Text style={styles.metricValue}>{value}</Text>
     </GlassCard>
   );
@@ -2817,6 +2981,9 @@ function TransactionSwipeRow({
       bounces={false}
       overScrollMode="never"
       scrollEventThrottle={16}
+      nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+      canCancelContentTouches={false}
     >
       <Pressable style={styles.transactionRowWide} onPress={onPress} onLongPress={onLongPress}>
         <CategoryIcon category={category} />
@@ -2998,7 +3165,7 @@ function SettingsRow({
     <Pressable style={styles.settingsRow} onPress={onPress}>
       <View style={styles.settingsLeft}>
         <Ionicons name={icon} size={18} color={COLORS.primary} />
-        <Text style={styles.transactionTitle}>{label}</Text>
+        <Text style={styles.transactionTitle}>{t(label)}</Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
     </Pressable>
@@ -3022,7 +3189,7 @@ function SettingsToggle({
     <View style={styles.settingsRow}>
       <View style={styles.settingsLeft}>
         <Ionicons name={icon} size={18} color={COLORS.primary} />
-        <Text style={styles.transactionTitle}>{label}</Text>
+        <Text style={styles.transactionTitle}>{t(label)}</Text>
       </View>
       <Switch
         value={value}
@@ -3108,6 +3275,7 @@ function normalizeData(input: Partial<AppData>): AppData {
     wallets: input.wallets?.length ? input.wallets : INITIAL_DATA.wallets,
     budgets: input.budgets?.length ? input.budgets : INITIAL_DATA.budgets,
     recurringTransactions: input.recurringTransactions?.length ? input.recurringTransactions : INITIAL_DATA.recurringTransactions,
+    reminderSettings: input.reminderSettings ?? DEFAULT_REMINDER_SETTINGS,
     currency: input.currency === "USD" ? "USD" : "VND",
     language: input.language === "en" ? "en" : "vi",
     requirePinOnResume: input.requirePinOnResume ?? false,
@@ -3151,6 +3319,40 @@ function applyRecurringTransactions(data: AppData): AppData {
     wallets: nextWallets,
     transactions: sortTransactions(nextTransactions),
   };
+}
+
+async function scheduleReminderNotifications(settings: ReminderSettings): Promise<ReminderSettings> {
+  await Promise.all((settings.notificationIds ?? []).map((id) => Notifications.cancelScheduledNotificationAsync(id).catch(() => undefined)));
+
+  if (!settings.enabled) {
+    return { ...settings, notificationIds: [] };
+  }
+
+  const permission = await Notifications.requestPermissionsAsync();
+  if (!permission.granted) {
+    Alert.alert("Chưa cấp quyền thông báo", "Hãy bật quyền thông báo cho Expo Go/app để nhận nhắc nhập thu chi.");
+    return { ...settings, enabled: false, notificationIds: [] };
+  }
+
+  const notificationIds: string[] = [];
+  for (const weekday of settings.weekdays) {
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Nhắc nhập thu chi",
+        body: "Đến giờ ghi lại giao dịch hôm nay.",
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+        weekday,
+        hour: settings.hour,
+        minute: settings.minute,
+      },
+    });
+    notificationIds.push(id);
+  }
+
+  return { ...settings, notificationIds };
 }
 
 function sortTransactions(items: Transaction[]) {
@@ -3214,6 +3416,7 @@ const EN_DICT: Record<string, string> = {
   "Quản lý ví": "Manage Wallets",
   "Ngân sách danh mục": "Budgets",
   "Giao dịch định kỳ": "Recurring",
+  "Nhắc nhập thu chi": "Entry reminder",
   "Đổi mã PIN 4 số": "Change PIN",
   "Chuyển đổi tiền tệ": "Currency Converter",
   "Cài đặt, dữ liệu và bảo mật": "Settings, data & security",
@@ -3266,6 +3469,11 @@ const EN_DICT: Record<string, string> = {
   "Tạo PIN": "Create PIN",
   "Hủy": "Cancel",
   "Xóa": "Delete",
+  "Thu nhập tháng này": "Income this month",
+  "Thu chi tháng này": "This month",
+  "Bật nhắc nhở": "Enable reminder",
+  "Lưu lịch nhắc": "Save reminder",
+  "Chọn cả 7 ngày": "Select all 7 days",
 };
 
 function t(str: string) {
@@ -3292,11 +3500,15 @@ function convertToBaseCurrency(value: number) {
 }
 
 function formatCurrency(value: number) {
+  const converted = convertToGlobalCurrency(value);
+  if (globalCurrency === "USD") {
+    return `$${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(converted)}`;
+  }
   return new Intl.NumberFormat(globalLanguage === "vi" ? "vi-VN" : "en-US", {
     style: "currency",
     currency: globalCurrency,
     maximumFractionDigits: globalCurrency === "VND" ? 0 : 2,
-  }).format(convertToGlobalCurrency(value));
+  }).format(converted);
 }
 
 function formatCompact(value: number) {
@@ -4121,6 +4333,39 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     color: COLORS.text,
     paddingHorizontal: 14,
     paddingVertical: 12,
+  },
+  timeInput: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  weekdayPicker: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  weekdayChip: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surface2,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  weekdayChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  weekdayChipText: {
+    color: COLORS.text,
+    fontWeight: "700",
+  },
+  weekdayChipTextActive: {
+    color: "#07162F",
   },
   categoryChoices: {
     flexDirection: "row",
