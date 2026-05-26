@@ -62,6 +62,7 @@ type AppData = {
   transactions: Transaction[];
   currency: string;
   requirePinOnResume: boolean;
+  isPremium: boolean;
 };
 
 type RootStackParamList = {
@@ -135,6 +136,7 @@ const INITIAL_DATA: AppData = {
   transactions: DEFAULT_TRANSACTIONS,
   currency: "VND",
   requirePinOnResume: true,
+  isPremium: false,
 };
 
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -544,7 +546,7 @@ function OverviewScreen({
   const trend = buildDailyTrend(monthTransactions);
 
   return (
-    <Screen title="Tổng quan hôm nay" subtitle={`Chào buổi sáng, ${data.profile.name}!`} profile={data.profile}>
+    <Screen title="Tổng quan hôm nay" subtitle="Sổ Thu Chi" profile={data.profile}>
       <View style={styles.balanceBlock}>
         <Text style={styles.sectionLabel}>Tổng số dư hiện tại</Text>
         <Text style={styles.balanceValue}>{formatCurrency(totals.balance)}</Text>
@@ -562,7 +564,7 @@ function OverviewScreen({
           {trend.map((item) => {
             const ratio = trendMax(trend) === 0 ? 0.1 : item.value / trendMax(trend);
             return (
-              <View key={item.label} style={styles.chartColumn}>
+              <View key={item.key} style={styles.chartColumn}>
                 <View style={styles.chartTrack}>
                   <View
                     style={[
@@ -631,14 +633,19 @@ function CalendarScreen({
   const days = buildCalendar(monthCursor, data.transactions);
   const selectedKey = isoDate(selectedDate);
   const items = data.transactions.filter((item) => isoDate(new Date(item.date)) === selectedKey);
+  const changeMonth = (offset: number) => {
+    const nextMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + offset, 1);
+    setMonthCursor(nextMonth);
+    setSelectedDate(nextMonth);
+  };
 
   return (
     <Screen title="Lịch giao dịch" subtitle={monthLabel(monthCursor)} profile={data.profile}>
       <GlassCard>
         <View style={styles.rowBetween}>
-          <IconButton icon="chevron-back" onPress={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1))} />
+          <IconButton icon="chevron-back" onPress={() => changeMonth(-1)} />
           <Text style={styles.cardTitle}>{monthLabel(monthCursor)}</Text>
-          <IconButton icon="chevron-forward" onPress={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1))} />
+          <IconButton icon="chevron-forward" onPress={() => changeMonth(1)} />
         </View>
 
         <View style={styles.weekHeader}>
@@ -649,15 +656,20 @@ function CalendarScreen({
 
         <View style={styles.calendarGrid}>
           {days.map((day) => {
-            const active = isoDate(day.date) === selectedKey;
+            const active = day.inMonth && isoDate(day.date) === selectedKey;
             return (
-              <Pressable key={`${day.date.toISOString()}_${day.inMonth}`} style={[styles.dayCell, active && styles.dayCellActive]} onPress={() => setSelectedDate(day.date)}>
+              <Pressable
+                key={`${day.date.toISOString()}_${day.inMonth}`}
+                style={[styles.dayCell, !day.inMonth && styles.dayCellOutside, active && styles.dayCellActive]}
+                disabled={!day.inMonth}
+                onPress={() => setSelectedDate(day.date)}
+              >
                 <Text style={[styles.dayLabel, !day.inMonth && styles.dayLabelMuted, active && styles.dayLabelActive]}>
-                  {day.date.getDate()}
+                  {day.inMonth ? day.date.getDate() : ""}
                 </Text>
                 <View style={styles.dayDots}>
-                  {day.income > 0 && <View style={[styles.dayDot, { backgroundColor: COLORS.income }]} />}
-                  {day.expense > 0 && <View style={[styles.dayDot, { backgroundColor: COLORS.expense }]} />}
+                  {day.inMonth && day.income > 0 && <View style={[styles.dayDot, { backgroundColor: COLORS.income }]} />}
+                  {day.inMonth && day.expense > 0 && <View style={[styles.dayDot, { backgroundColor: COLORS.expense }]} />}
                 </View>
               </Pressable>
             );
@@ -674,7 +686,7 @@ function CalendarScreen({
             <Pressable
               key={item.id}
               style={styles.transactionRow}
-              onPress={() => navigation.navigate("TransactionDetail", { transactionId: item.id })}
+              onPress={() => navigation.navigate("TransactionEditor", { transactionId: item.id })}
             >
               <CategoryIcon category={categoriesById[item.categoryId]} />
               <View style={styles.transactionTextBlock}>
@@ -700,7 +712,7 @@ function TransactionEntryTab({
   saveTransaction: (payload: Omit<Transaction, "id"> & { id?: string }) => void;
 }) {
   return (
-    <Screen title="Nhập giao dịch" subtitle="Ghi nhanh thu nhập và chi tiêu" profile={data.profile} scrollable={false}>
+    <Screen title="Nhập giao dịch" subtitle="Ghi nhanh thu nhập và chi tiêu" profile={data.profile}>
       <TransactionForm
         data={data}
         saveTransaction={saveTransaction}
@@ -783,17 +795,51 @@ function MoreScreen({
   clearPin: () => Promise<void>;
 }) {
   const navigation = useNavigation<any>();
+  const [premiumCode, setPremiumCode] = useState("");
 
   return (
     <Screen title="Khác" subtitle="Cài đặt, dữ liệu và bảo mật" profile={data.profile}>
       <GlassCard>
-        <View style={styles.profileCard}>
-          <Avatar initials={data.profile.initials} size={60} />
-          <View style={styles.transactionTextBlock}>
-            <Text style={styles.profileName}>{data.profile.name}</Text>
-            <Text style={styles.transactionMeta}>Premium UI · React Native</Text>
+        <View style={styles.rowBetween}>
+          <View style={styles.settingsLeft}>
+            <Ionicons name="sparkles" size={20} color={COLORS.gold} />
+            <View style={styles.transactionTextBlock}>
+              <Text style={styles.cardTitle}>Premium</Text>
+              <Text style={styles.transactionMeta}>
+                {data.isPremium ? "Đã kích hoạt" : "Nhập mã để nâng cấp"}
+              </Text>
+            </View>
           </View>
+          {data.isPremium && <Ionicons name="checkmark-circle" size={24} color={COLORS.success} />}
         </View>
+        {!data.isPremium && (
+          <>
+            <TextInput
+              value={premiumCode}
+              onChangeText={setPremiumCode}
+              autoCapitalize="characters"
+              placeholder="Mã Premium"
+              placeholderTextColor={COLORS.muted}
+              style={styles.input}
+            />
+            <Pressable
+              style={styles.primaryAction}
+              onPress={() => {
+                const normalized = premiumCode.trim().toUpperCase();
+                if (!["PRE", "PREMIUM", "THUCHI"].includes(normalized)) {
+                  Alert.alert("Mã không hợp lệ", "Vui lòng kiểm tra lại mã Premium.");
+                  return;
+                }
+
+                setData((current) => ({ ...current, isPremium: true }));
+                setPremiumCode("");
+              }}
+            >
+              <Ionicons name="arrow-up-circle" size={18} color="#07162F" />
+              <Text style={styles.primaryActionText}>Nâng Premium</Text>
+            </Pressable>
+          </>
+        )}
       </GlassCard>
 
       <GlassCard>
@@ -810,13 +856,6 @@ function MoreScreen({
       <GlassCard>
         <SettingsRow label="Xuất dữ liệu CSV" icon="download" onPress={() => void exportCsv()} />
         <SettingsRow label="Nhập dữ liệu CSV" icon="cloud-upload" onPress={() => void importCsv()} />
-      </GlassCard>
-
-      <GlassCard>
-        <Text style={styles.cardTitle}>Thống kê nhanh</Text>
-        <Text style={styles.transactionMeta}>Số giao dịch: {data.transactions.length}</Text>
-        <Text style={styles.transactionMeta}>Số danh mục: {data.categories.length}</Text>
-        <Text style={styles.transactionMeta}>SDK: Expo 54 · React Native 0.81</Text>
       </GlassCard>
     </Screen>
   );
@@ -1573,6 +1612,7 @@ function normalizeData(input: Partial<AppData>): AppData {
     transactions: sortTransactions(input.transactions?.length ? input.transactions : INITIAL_DATA.transactions),
     currency: input.currency ?? "VND",
     requirePinOnResume: input.requirePinOnResume ?? true,
+    isPremium: input.isPremium ?? false,
   };
 }
 
@@ -1639,13 +1679,14 @@ function buildDailyTrend(transactions: Transaction[]) {
       .reduce((sum, item) => sum + item.amount, 0);
 
     return {
+      key,
       label: new Intl.DateTimeFormat("vi-VN", { weekday: "short" }).format(date).slice(0, 2),
       value,
     };
   });
 }
 
-function trendMax(trend: { label: string; value: number }[]) {
+function trendMax(trend: { key: string; label: string; value: number }[]) {
   return Math.max(...trend.map((item) => item.value), 0);
 }
 
@@ -2103,6 +2144,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(173,198,255,0.18)",
     borderWidth: 1,
     borderColor: "rgba(173,198,255,0.26)",
+  },
+  dayCellOutside: {
+    opacity: 0.35,
   },
   dayLabel: {
     color: COLORS.text,
