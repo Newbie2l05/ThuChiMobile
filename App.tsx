@@ -95,6 +95,7 @@ type AppData = {
   budgets: Budget[];
   recurringTransactions: RecurringTransaction[];
   currency: string;
+  language: "vi" | "en";
   requirePinOnResume: boolean;
   isPremium: boolean;
   themeMode: "dark" | "light";
@@ -110,6 +111,7 @@ type RootStackParamList = {
   SpendingTrend: undefined;
   YearStats: undefined;
   TodayTransactions: undefined;
+  MonthTransactions: { categoryId?: string } | undefined;
   Search: undefined;
   CurrencyConverter: undefined;
   Budgets: undefined;
@@ -132,22 +134,40 @@ const DEFAULT_WALLETS: Wallet[] = [
   { id: "ewallet", name: "Ví điện tử", balance: 1000000 },
 ];
 
-const COLORS = {
-  background: "#131315",
-  backgroundAlt: "#0E0E10",
-  surface: "#1B1B1D",
-  surface2: "#1F1F21",
-  surface3: "#2A2A2C",
-  border: "rgba(255,255,255,0.12)",
-  text: "#E4E2E4",
-  muted: "#AEB4C2",
-  primary: "#ADC6FF",
-  primaryStrong: "#4B8EFF",
-  income: "#79B5FF",
-  expense: "#FFB868",
-  error: "#FF8E85",
-  success: "#7CD992",
-  gold: "#D4AF37",
+const DARK_COLORS = {
+  background: '#131315',
+  backgroundAlt: '#0E0E10',
+  surface: '#1B1B1D',
+  surface2: '#1F1F21',
+  surface3: '#2A2A2C',
+  border: 'rgba(255,255,255,0.12)',
+  text: '#E4E2E4',
+  muted: '#AEB4C2',
+  primary: '#ADC6FF',
+  primaryStrong: '#4B8EFF',
+  income: '#79B5FF',
+  expense: '#FFB868',
+  error: '#FF8E85',
+  success: '#7CD992',
+  gold: '#D4AF37',
+};
+
+const LIGHT_COLORS = {
+  background: '#F5F5F5',
+  backgroundAlt: '#FFFFFF',
+  surface: '#FFFFFF',
+  surface2: '#F9F9F9',
+  surface3: '#EFEFEF',
+  border: 'rgba(0,0,0,0.12)',
+  text: '#1C1C1E',
+  muted: '#8E8E93',
+  primary: '#0A84FF',
+  primaryStrong: '#005ECB',
+  income: '#34C759',
+  expense: '#FF3B30',
+  error: '#FF3B30',
+  success: '#34C759',
+  gold: '#FFCC00',
 };
 
 const CATEGORY_ICONS = [
@@ -286,6 +306,7 @@ const INITIAL_DATA: AppData = {
   budgets: DEFAULT_BUDGETS,
   recurringTransactions: DEFAULT_RECURRING,
   currency: "VND",
+  language: "vi",
   requirePinOnResume: false,
   isPremium: false,
   themeMode: "dark",
@@ -302,6 +323,11 @@ function animateNext() {
   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 }
 
+export const ThemeContext = React.createContext<'dark' | 'light'>('dark');
+export const useAppTheme = () => React.useContext(ThemeContext);
+export const useAppColors = () => useAppTheme() === 'dark' ? DARK_COLORS : LIGHT_COLORS;
+export const useAppStyles = () => cachedStyles[useAppTheme()];
+
 export default function App() {
   const [data, setData] = useState<AppData>(INITIAL_DATA);
   const [booting, setBooting] = useState(true);
@@ -317,6 +343,7 @@ export default function App() {
         const savedPin = await SecureStore.getItemAsync(PIN_KEY);
 
         const nextData = applyRecurringTransactions(saved ? normalizeData(JSON.parse(saved) as Partial<AppData>) : INITIAL_DATA);
+        setGlobalFormatting(nextData.currency, nextData.language);
         setData(nextData);
 
         if (savedPin && nextData.requirePinOnResume) {
@@ -337,6 +364,7 @@ export default function App() {
       return;
     }
 
+    setGlobalFormatting(data.currency, data.language);
     void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }, [booting, data]);
 
@@ -599,7 +627,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
-        <NavigationContainer>
+        <ThemeContext.Provider value={data.themeMode}><NavigationContainer>
           <StatusBar style="light" />
           <RNStatusBar barStyle="light-content" />
           <Stack.Navigator
@@ -692,6 +720,16 @@ export default function App() {
                 />
               )}
             </Stack.Screen>
+            <Stack.Screen name="MonthTransactions">
+              {(props) => (
+                <MonthTransactionsScreen
+                  {...props}
+                  data={data}
+                  categoriesById={categoriesById}
+                  deleteTransaction={deleteTransaction}
+                />
+              )}
+            </Stack.Screen>
             <Stack.Screen name="Search">
               {(props) => (
                 <SearchScreen
@@ -745,7 +783,7 @@ export default function App() {
             onUnlock={() => setLocked(false)}
             onSetPin={setOrChangePin}
           />
-        </NavigationContainer>
+        </NavigationContainer></ThemeContext.Provider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
@@ -776,6 +814,8 @@ function TabsShell({
   setData: React.Dispatch<React.SetStateAction<AppData>>;
   clearPin: () => Promise<void>;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const insets = useSafeAreaInsets();
 
   return (
@@ -877,6 +917,8 @@ function OverviewScreen({
   data: AppData;
   categoriesById: Record<string, Category>;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const navigation = useNavigation<any>();
   const totals = getTotals(data.transactions);
   const monthTransactions = data.transactions.filter((item) => sameMonth(new Date(item.date), TODAY));
@@ -899,8 +941,12 @@ function OverviewScreen({
       </GlassCard>
 
       <View style={styles.statsGrid}>
-        <MetricCard label="Thu nhập tháng" value={formatCurrency(sumByType(monthTransactions, "income"))} accent={COLORS.income} icon="arrow-down" />
-        <MetricCard label="Chi tiêu tháng" value={formatCurrency(sumByType(monthTransactions, "expense"))} accent={COLORS.expense} icon="arrow-up" />
+        <Pressable style={styles.flex} onPress={() => navigation.navigate("MonthTransactions")}>
+          <MetricCard label="Thu nhập tháng" value={formatCurrency(sumByType(monthTransactions, "income"))} accent={COLORS.income} icon="arrow-down" />
+        </Pressable>
+        <Pressable style={styles.flex} onPress={() => navigation.navigate("MonthTransactions")}>
+          <MetricCard label="Chi tiêu tháng" value={formatCurrency(sumByType(monthTransactions, "expense"))} accent={COLORS.expense} icon="arrow-up" />
+        </Pressable>
       </View>
 
       <Pressable onPress={() => navigation.navigate("SpendingTrend")}>
@@ -944,7 +990,7 @@ function OverviewScreen({
           </Pressable>
         </View>
 
-        {data.transactions.slice(0, 5).map((item) => (
+        {data.transactions.slice(0, 3).map((item) => (
           <TransactionSwipeRow
             key={item.id}
             transaction={item}
@@ -967,6 +1013,8 @@ function CalendarScreen({
   categoriesById: Record<string, Category>;
   deleteTransaction: (transactionId: string) => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const navigation = useNavigation<any>();
   const [selectedDate, setSelectedDate] = useState(startOfDay(TODAY));
   const [monthCursor, setMonthCursor] = useState(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1));
@@ -1060,6 +1108,8 @@ function TransactionEntryTab({
   saveCategory: (payload: Omit<Category, "id"> & { id?: string }) => void;
   deleteCategory: (categoryId: string) => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <Screen title="Nhập giao dịch" subtitle="Ghi nhanh thu nhập và chi tiêu" profile={data.profile}>
       <TransactionForm
@@ -1080,6 +1130,8 @@ function ReportsScreen({
   data: AppData;
   categoriesById: Record<string, Category>;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const navigation = useNavigation<any>();
   const monthly = monthBuckets(data.transactions);
   const categorySummary = summarizeCategories(data.transactions, data.categories);
@@ -1136,6 +1188,34 @@ function ReportsScreen({
           ))
         )}
       </GlassCard>
+
+      <GlassCard>
+        <Text style={styles.cardTitle}>Hạn mức tháng này</Text>
+        {data.budgets.length === 0 ? (
+          <Text style={styles.emptyText}>Chưa thiết lập ngân sách.</Text>
+        ) : (
+          data.budgets.map((budget) => {
+            const usages = getBudgetUsages(data.transactions, data.budgets);
+            const category = data.categories.find((item) => item.id === budget.categoryId);
+            const used = usages[budget.id] ?? 0;
+            const percent = budget.monthlyLimit ? used / budget.monthlyLimit : 0;
+            const warn = percent >= budget.warnAt;
+            return (
+              <Pressable key={budget.id} style={styles.budgetRow} onPress={() => navigation.navigate("MonthTransactions", { categoryId: budget.categoryId })}>
+                <View style={styles.transactionTextBlock}>
+                  <Text style={styles.transactionTitle}>{category?.name ?? "Danh mục"}</Text>
+                  <Text style={[styles.transactionMeta, warn && { color: COLORS.expense }]}>
+                    Đã dùng {formatCurrency(used)} / {formatCurrency(budget.monthlyLimit)} ({Math.round(percent * 100)}%)
+                  </Text>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${Math.min(percent, 1) * 100}%`, backgroundColor: warn ? COLORS.expense : COLORS.success }]} />
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })
+        )}
+      </GlassCard>
     </Screen>
   );
 }
@@ -1156,6 +1236,8 @@ function MoreScreen({
   clearPin: () => Promise<void>;
   pinEnabled: boolean;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const navigation = useNavigation<any>();
   const [premiumCode, setPremiumCode] = useState("");
 
@@ -1166,7 +1248,7 @@ function MoreScreen({
           <View style={styles.settingsLeft}>
             <Ionicons name="sparkles" size={20} color={COLORS.gold} />
             <View style={styles.transactionTextBlock}>
-              <Text style={styles.cardTitle}>Premium</Text>
+              <Text style={styles.cardTitle}>Premium (Không QC)</Text>
               <Text style={styles.transactionMeta}>
                 {data.isPremium ? "Đã kích hoạt" : "Nhập mã để nâng cấp"}
               </Text>
@@ -1188,7 +1270,8 @@ function MoreScreen({
               style={styles.primaryAction}
               onPress={() => {
                 const normalized = premiumCode.trim().toUpperCase();
-                if (!["PRE", "PREMIUM", "THUCHI"].includes(normalized)) {
+                const codes = ["PRE", "PREMIUM", "THUCHI", "VIP2026", "NOADS", "NANGCAP", "PRO"];
+                if (!codes.includes(normalized)) {
                   Alert.alert("Mã không hợp lệ", "Vui lòng kiểm tra lại mã Premium.");
                   return;
                 }
@@ -1211,6 +1294,24 @@ function MoreScreen({
         <SettingsRow label="Giao dịch định kỳ" icon="repeat" onPress={() => navigation.navigate("RecurringTransactions")} />
         <SettingsRow label="Đổi mã PIN 4 số" icon="lock-closed" onPress={() => navigation.navigate("ChangePin")} />
         <SettingsRow label="Chuyển đổi tiền tệ" icon="swap-horizontal" onPress={() => navigation.navigate("CurrencyConverter")} />
+        <SettingsToggle
+          label="Ngôn ngữ: Tiếng Anh"
+          icon="language"
+          value={data.language === "en"}
+          onValueChange={(value) => {
+            animateNext();
+            setData((current) => ({ ...current, language: value ? "en" : "vi" }));
+          }}
+        />
+        <SettingsToggle
+          label="Đơn vị tiền tệ: USD"
+          icon="cash-outline"
+          value={data.currency === "USD"}
+          onValueChange={(value) => {
+            animateNext();
+            setData((current) => ({ ...current, currency: value ? "USD" : "VND" }));
+          }}
+        />
         <SettingsToggle
           label="Chế độ sáng"
           icon="sunny"
@@ -1259,6 +1360,8 @@ function TransactionEditorScreen({
   saveCategory: (payload: Omit<Category, "id"> & { id?: string }) => void;
   deleteCategory: (categoryId: string) => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <Screen title={route.params?.transactionId ? "Chỉnh sửa giao dịch" : "Thêm giao dịch"} subtitle="Nhập thông tin giao dịch" profile={data.profile}>
       <TransactionForm
@@ -1285,6 +1388,8 @@ function TransactionDetailScreen({
   categoriesById: Record<string, Category>;
   deleteTransaction: (transactionId: string) => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const transaction = data.transactions.find((item) => item.id === route.params.transactionId);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -1313,6 +1418,8 @@ function TransactionDetailScreen({
 
         <DetailRow label="Loại giao dịch" value={transaction.type === "income" ? "Thu nhập" : "Chi tiêu"} />
         <DetailRow label="Ví" value={getWalletName(data.wallets, transaction.account)} />
+        <DetailRow label="Ngày nhập" value={formatDate(transaction.date)} />
+        <DetailRow label="Giờ nhập" value={new Date(transaction.date).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} />
         <DetailRow label="Ghi chú" value={transaction.note || "Không có"} />
         <DetailRow label="Ảnh hóa đơn" value={`${transaction.images.length} ảnh`} />
       </GlassCard>
@@ -1384,6 +1491,8 @@ function WalletsScreen({
   saveWallet: (payload: Omit<Wallet, "id"> & { id?: string }) => void;
   deleteWallet: (walletId: string) => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const [editing, setEditing] = useState<Wallet | null>(null);
   const [name, setName] = useState("");
   const [balance, setBalance] = useState("");
@@ -1439,20 +1548,22 @@ function WalletsScreen({
       <GlassCard>
         <Text style={styles.cardTitle}>Danh sách ví</Text>
         {wallets.map((wallet) => (
-          <Pressable key={wallet.id} style={styles.walletRow} onPress={() => beginEdit(wallet)}>
-            <View>
-              <Text style={styles.transactionTitle}>{wallet.name}</Text>
-              <Text style={styles.transactionMeta}>{wallet.lockedName ? "Ví mặc định" : "Ví tùy chỉnh"}</Text>
-            </View>
-            <View style={styles.walletRight}>
+          <ScrollView key={wallet.id} horizontal showsHorizontalScrollIndicator={false} snapToInterval={320} decelerationRate="fast">
+            <Pressable style={styles.transactionRowWide} onPress={() => beginEdit(wallet)}>
+              <View style={styles.transactionTextBlock}>
+                <Text style={styles.transactionTitle}>{wallet.name}</Text>
+                <Text style={styles.transactionMeta}>{wallet.lockedName ? "Ví mặc định" : "Ví tùy chỉnh"}</Text>
+              </View>
               <Text style={styles.transactionAmount}>{formatCurrency(wallet.balance)}</Text>
-              {!wallet.lockedName && (
-                <Pressable onPress={() => deleteWallet(wallet.id)}>
-                  <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+            </Pressable>
+            {!wallet.lockedName && (
+              <View style={styles.swipeActions}>
+                <Pressable style={styles.swipeDelete} onPress={() => deleteWallet(wallet.id)}>
+                  <Ionicons name="trash-outline" size={18} color={COLORS.text} />
                 </Pressable>
-              )}
-            </View>
-          </Pressable>
+              </View>
+            )}
+          </ScrollView>
         ))}
       </GlassCard>
 
@@ -1469,6 +1580,8 @@ function SpendingTrendScreen({
 }: NativeStackScreenProps<RootStackParamList, "SpendingTrend"> & {
   data: AppData;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const days = buildDailyTrend(data.transactions, 30);
   const last7 = days.slice(-7).reduce((sum, item) => sum + item.value, 0);
   const previous7 = days.slice(-14, -7).reduce((sum, item) => sum + item.value, 0);
@@ -1514,6 +1627,8 @@ function YearStatsScreen({
 }: NativeStackScreenProps<RootStackParamList, "YearStats"> & {
   data: AppData;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const [year, setYear] = useState(TODAY.getFullYear());
   const buckets = yearBuckets(data.transactions, year);
   const max = Math.max(...buckets.map((item) => item.expense), 1);
@@ -1526,17 +1641,19 @@ function YearStatsScreen({
           <Text style={styles.cardTitle}>{year}</Text>
           <IconButton icon="chevron-forward" onPress={() => setYear((current) => current + 1)} />
         </View>
-        <View style={styles.monthBars}>
-          {buckets.map((item) => (
-            <View key={item.label} style={styles.monthBarItem}>
-              <Text style={styles.barValue}>{formatCompact(item.expense)}</Text>
-              <View style={styles.monthBarTrack}>
-                <View style={[styles.monthBar, { height: Math.max(10, (item.expense / max) * 120) }]} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.trend30Row}>
+            {buckets.map((item) => (
+              <View key={item.label} style={styles.trend30Item}>
+                <Text style={styles.barValue}>{formatCompact(item.expense)}</Text>
+                <View style={styles.trend30Track}>
+                  <View style={[styles.trend30Bar, { height: Math.max(8, (item.expense / max) * 120) }]} />
+                </View>
+                <Text style={styles.chartLabel}>{item.label.replace("T", "")}</Text>
               </View>
-              <Text style={styles.chartLabel}>{item.label}</Text>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        </ScrollView>
       </GlassCard>
       <GlassCard>
         <Text style={styles.cardTitle}>Gợi ý thông minh</Text>
@@ -1559,6 +1676,8 @@ function TodayTransactionsScreen({
   categoriesById: Record<string, Category>;
   deleteTransaction: (transactionId: string) => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const todayItems = data.transactions.filter((item) => isoDate(new Date(item.date)) === isoDate(TODAY));
 
   return (
@@ -1586,6 +1705,50 @@ function TodayTransactionsScreen({
   );
 }
 
+function MonthTransactionsScreen({
+  navigation,
+  data,
+  categoriesById,
+  deleteTransaction,
+}: NativeStackScreenProps<RootStackParamList, "MonthTransactions"> & {
+  data: AppData;
+  categoriesById: Record<string, Category>;
+  deleteTransaction: (transactionId: string) => void;
+  route: NativeStackScreenProps<RootStackParamList, "MonthTransactions">["route"];
+}) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
+  const categoryId = route.params?.categoryId;
+  const monthItems = data.transactions.filter((item) => sameMonth(new Date(item.date), TODAY) && (!categoryId || item.categoryId === categoryId));
+  const categoryName = categoryId ? categoriesById[categoryId]?.name : null;
+
+  return (
+    <Screen title={categoryName ? `Chi tiêu: ${categoryName}` : "Thu chi tháng này"} subtitle={monthLabel(TODAY)} profile={{ name: "", initials: "" }}>
+      <GlassCard>
+        {monthItems.length === 0 ? (
+          <Text style={styles.emptyText}>Tháng này chưa có giao dịch.</Text>
+        ) : (
+          <ScrollView style={{ maxHeight: 500 }}>
+            {monthItems.map((item) => (
+              <TransactionSwipeRow
+                key={item.id}
+                transaction={item}
+                category={categoriesById[item.categoryId]}
+                onPress={() => navigation.navigate("TransactionDetail", { transactionId: item.id })}
+                onEdit={() => navigation.navigate("TransactionEditor", { transactionId: item.id })}
+                onDelete={() => deleteTransaction(item.id)}
+              />
+            ))}
+          </ScrollView>
+        )}
+      </GlassCard>
+      <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
+        <Text style={styles.secondaryActionText}>Quay lại</Text>
+      </Pressable>
+    </Screen>
+  );
+}
+
 function SearchScreen({
   navigation,
   data,
@@ -1594,6 +1757,8 @@ function SearchScreen({
   data: AppData;
   categoriesById: Record<string, Category>;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const [searchText, setSearchText] = useState("");
   const results = searchText.trim()
     ? searchTransactions(data.transactions, data.categories, searchText).slice(0, 30)
@@ -1631,6 +1796,8 @@ function SearchScreen({
 function CurrencyConverterScreen({
   navigation,
 }: NativeStackScreenProps<RootStackParamList, "CurrencyConverter">) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <Screen title="Chuyển đổi tiền tệ" subtitle="Tỉ giá tham khảo theo ngày" profile={{ name: "", initials: "" }}>
       <CurrencyConverterCard />
@@ -1651,6 +1818,8 @@ function BudgetsScreen({
   saveBudget: (payload: Omit<Budget, "id"> & { id?: string }) => void;
   deleteBudget: (budgetId: string) => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const expenseCategories = data.categories.filter((item) => item.type === "expense");
   const [editing, setEditing] = useState<Budget | null>(null);
   const [categoryId, setCategoryId] = useState(expenseCategories[0]?.id ?? "");
@@ -1684,7 +1853,7 @@ function BudgetsScreen({
           </View>
         </ScrollView>
         <TextInput
-          value={limit}
+          value={limit ? new Intl.NumberFormat("vi-VN").format(Number(limit)) : ""}
           onChangeText={(text) => setLimit(text.replace(/[^\d]/g, ""))}
           keyboardType="number-pad"
           placeholder="Hạn mức tháng"
@@ -1729,20 +1898,24 @@ function BudgetsScreen({
           const percent = budget.monthlyLimit ? used / budget.monthlyLimit : 0;
           const warn = percent >= budget.warnAt;
           return (
-            <Pressable key={budget.id} style={styles.budgetRow} onPress={() => beginEdit(budget)}>
-              <View style={styles.transactionTextBlock}>
-                <Text style={styles.transactionTitle}>{category?.name ?? "Danh mục"}</Text>
-                <Text style={[styles.transactionMeta, warn && { color: COLORS.expense }]}>
-                  Đã dùng {formatCurrency(used)} / {formatCurrency(budget.monthlyLimit)} ({Math.round(percent * 100)}%)
-                </Text>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${Math.min(percent, 1) * 100}%`, backgroundColor: warn ? COLORS.expense : COLORS.success }]} />
+            <ScrollView key={budget.id} horizontal showsHorizontalScrollIndicator={false} snapToInterval={320} decelerationRate="fast">
+              <Pressable style={styles.transactionRowWide} onPress={() => beginEdit(budget)}>
+                <View style={styles.transactionTextBlock}>
+                  <Text style={styles.transactionTitle}>{category?.name ?? "Danh mục"}</Text>
+                  <Text style={[styles.transactionMeta, warn && { color: COLORS.expense }]}>
+                    Đã dùng {formatCurrency(used)} / {formatCurrency(budget.monthlyLimit)} ({Math.round(percent * 100)}%)
+                  </Text>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${Math.min(percent, 1) * 100}%`, backgroundColor: warn ? COLORS.expense : COLORS.success }]} />
+                  </View>
                 </View>
-              </View>
-              <Pressable onPress={() => deleteBudget(budget.id)}>
-                <Ionicons name="trash-outline" size={18} color={COLORS.error} />
               </Pressable>
-            </Pressable>
+              <View style={styles.swipeActions}>
+                <Pressable style={styles.swipeDelete} onPress={() => deleteBudget(budget.id)}>
+                  <Ionicons name="trash-outline" size={18} color={COLORS.text} />
+                </Pressable>
+              </View>
+            </ScrollView>
           );
         })}
       </GlassCard>
@@ -1764,6 +1937,8 @@ function RecurringTransactionsScreen({
   saveRecurring: (payload: Omit<RecurringTransaction, "id"> & { id?: string }) => void;
   deleteRecurring: (recurringId: string) => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const [editing, setEditing] = useState<RecurringTransaction | null>(null);
   const [type, setType] = useState<TransactionType>("expense");
   const [amount, setAmount] = useState("");
@@ -1848,18 +2023,22 @@ function RecurringTransactionsScreen({
         {data.recurringTransactions.map((item) => {
           const category = data.categories.find((categoryItem) => categoryItem.id === item.categoryId);
           return (
-            <Pressable key={item.id} style={styles.budgetRow} onPress={() => beginEdit(item)}>
-              <CategoryIcon category={category} />
-              <View style={styles.transactionTextBlock}>
-                <Text style={styles.transactionTitle}>{item.note}</Text>
-                <Text style={styles.transactionMeta}>
-                  Ngày {item.dayOfMonth} mỗi tháng · {item.type === "income" ? "+" : "-"}{formatCurrency(item.amount)}
-                </Text>
-              </View>
-              <Pressable onPress={() => deleteRecurring(item.id)}>
-                <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+            <ScrollView key={item.id} horizontal showsHorizontalScrollIndicator={false} snapToInterval={320} decelerationRate="fast">
+              <Pressable style={styles.transactionRowWide} onPress={() => beginEdit(item)}>
+                <CategoryIcon category={category} />
+                <View style={styles.transactionTextBlock}>
+                  <Text style={styles.transactionTitle}>{item.note}</Text>
+                  <Text style={styles.transactionMeta}>
+                    Ngày {item.dayOfMonth} mỗi tháng · {item.type === "income" ? "+" : "-"}{formatCurrency(item.amount)}
+                  </Text>
+                </View>
               </Pressable>
-            </Pressable>
+              <View style={styles.swipeActions}>
+                <Pressable style={styles.swipeDelete} onPress={() => deleteRecurring(item.id)}>
+                  <Ionicons name="trash-outline" size={18} color={COLORS.text} />
+                </Pressable>
+              </View>
+            </ScrollView>
           );
         })}
       </GlassCard>
@@ -1881,6 +2060,8 @@ function CategoriesScreen({
   saveCategory: (payload: Omit<Category, "id"> & { id?: string }) => void;
   deleteCategory: (categoryId: string) => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const [type, setType] = useState<TransactionType>("expense");
   const [name, setName] = useState("");
   const iconOptions = CATEGORY_ICONS;
@@ -1943,16 +2124,20 @@ function CategoriesScreen({
       <GlassCard>
         <Text style={styles.cardTitle}>Danh sách hiện có</Text>
         {filtered.map((item) => (
-          <View key={item.id} style={styles.categoryRow}>
-            <CategoryIcon category={item} />
-            <View style={styles.transactionTextBlock}>
-              <Text style={styles.transactionTitle}>{item.name}</Text>
-              <Text style={styles.transactionMeta}>{item.type === "income" ? "Thu nhập" : "Chi tiêu"}</Text>
+          <ScrollView key={item.id} horizontal showsHorizontalScrollIndicator={false} snapToInterval={320} decelerationRate="fast">
+            <View style={styles.transactionRowWide}>
+              <CategoryIcon category={item} />
+              <View style={styles.transactionTextBlock}>
+                <Text style={styles.transactionTitle}>{item.name}</Text>
+                <Text style={styles.transactionMeta}>{item.type === "income" ? "Thu nhập" : "Chi tiêu"}</Text>
+              </View>
             </View>
-            <Pressable onPress={() => deleteCategory(item.id)}>
-              <Ionicons name="trash-outline" size={18} color={COLORS.error} />
-            </Pressable>
-          </View>
+            <View style={styles.swipeActions}>
+              <Pressable style={styles.swipeDelete} onPress={() => deleteCategory(item.id)}>
+                <Ionicons name="trash-outline" size={18} color={COLORS.text} />
+              </Pressable>
+            </View>
+          </ScrollView>
         ))}
       </GlassCard>
 
@@ -1971,6 +2156,8 @@ function ChangePinScreen({
   setOrChangePin: (pin: string) => Promise<void>;
   clearPin: () => Promise<void>;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const [nextPin, setNextPin] = useState("");
 
   return (
@@ -2032,6 +2219,8 @@ function TransactionForm({
   defaultType?: TransactionType;
   onSaved: () => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const existing = data.transactions.find((item) => item.id === transactionId);
   const [type, setType] = useState<TransactionType>(existing?.type ?? defaultType ?? "expense");
   const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
@@ -2295,6 +2484,8 @@ function PinGate({
   onUnlock: () => void;
   onSetPin: (pin: string) => Promise<void>;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const [pin, setPin] = useState("");
   const [firstPin, setFirstPin] = useState("");
   const creating = !existingPin;
@@ -2404,6 +2595,8 @@ function Screen({
   children: React.ReactNode;
   scrollable?: boolean;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const content = (
@@ -2438,6 +2631,8 @@ function Screen({
 }
 
 function Avatar({ initials, size = 40 }: { initials: string; size?: number }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <LinearGradient colors={["#253556", "#121A29"]} style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}>
       <Text style={[styles.avatarText, { fontSize: size * 0.34 }]}>{initials}</Text>
@@ -2446,6 +2641,8 @@ function Avatar({ initials, size = 40 }: { initials: string; size?: number }) {
 }
 
 function GlassCard({ children, style }: { children: React.ReactNode; style?: object }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return <View style={[styles.glassCard, style]}>{children}</View>;
 }
 
@@ -2460,6 +2657,8 @@ function MetricCard({
   accent: string;
   icon: keyof typeof Ionicons.glyphMap;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <GlassCard style={styles.metricCard}>
       <View style={[styles.metricIcon, { backgroundColor: `${accent}22` }]}>
@@ -2486,6 +2685,8 @@ function TransactionSwipeRow({
   onDelete?: () => void;
   onLongPress?: () => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={320} decelerationRate="fast">
       <Pressable style={styles.transactionRowWide} onPress={onPress} onLongPress={onLongPress}>
@@ -2515,6 +2716,8 @@ function TransactionSwipeRow({
 }
 
 function CurrencyConverterCard() {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const [amount, setAmount] = useState("100");
   const [from, setFrom] = useState("USD");
   const [to, setTo] = useState("VND");
@@ -2585,6 +2788,8 @@ function CurrencyPicker({
   value: string;
   onOpen: () => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <Pressable
       style={styles.accountChip}
@@ -2606,6 +2811,8 @@ function TabIcon({
   color: string;
   focused: boolean;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const progress = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
   useEffect(() => {
@@ -2645,6 +2852,8 @@ function CategoryIcon({
   active?: boolean;
   large?: boolean;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   const size = large ? 58 : compact ? 34 : 44;
 
   return (
@@ -2674,6 +2883,8 @@ function SettingsRow({
   icon: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <Pressable style={styles.settingsRow} onPress={onPress}>
       <View style={styles.settingsLeft}>
@@ -2696,6 +2907,8 @@ function SettingsToggle({
   value: boolean;
   onValueChange: (value: boolean) => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <View style={styles.settingsRow}>
       <View style={styles.settingsLeft}>
@@ -2713,6 +2926,8 @@ function SettingsToggle({
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <View style={styles.detailRow}>
       <Text style={styles.transactionMeta}>{label}</Text>
@@ -2728,6 +2943,8 @@ function IconButton({
   icon: keyof typeof Ionicons.glyphMap;
   onPress: () => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <Pressable style={styles.iconButton} onPress={onPress}>
       <Ionicons name={icon} size={18} color={COLORS.text} />
@@ -2744,6 +2961,8 @@ function SegmentButton({
   active: boolean;
   onPress: () => void;
 }) {
+  const styles = useAppStyles();
+  const COLORS = useAppColors();
   return (
     <Pressable style={[styles.segmentButton, active && styles.segmentButtonActive]} onPress={onPress}>
       <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
@@ -2781,6 +3000,7 @@ function normalizeData(input: Partial<AppData>): AppData {
     budgets: input.budgets?.length ? input.budgets : INITIAL_DATA.budgets,
     recurringTransactions: input.recurringTransactions?.length ? input.recurringTransactions : INITIAL_DATA.recurringTransactions,
     currency: input.currency ?? "VND",
+    language: input.language ?? "vi",
     requirePinOnResume: input.requirePinOnResume ?? false,
     isPremium: input.isPremium ?? false,
     themeMode: input.themeMode ?? "dark",
@@ -2860,16 +3080,24 @@ function getBudgetUsages(transactions: Transaction[], budgets: Budget[]) {
   );
 }
 
+let globalCurrency = "VND";
+let globalLanguage = "vi";
+
+function setGlobalFormatting(currency: string, language: string) {
+  globalCurrency = currency;
+  globalLanguage = language;
+}
+
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("vi-VN", {
+  return new Intl.NumberFormat(globalLanguage === "vi" ? "vi-VN" : "en-US", {
     style: "currency",
-    currency: "VND",
-    maximumFractionDigits: 0,
+    currency: globalCurrency,
+    maximumFractionDigits: globalCurrency === "VND" ? 0 : 2,
   }).format(value);
 }
 
 function formatCompact(value: number) {
-  return new Intl.NumberFormat("vi-VN", {
+  return new Intl.NumberFormat(globalLanguage === "vi" ? "vi-VN" : "en-US", {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
@@ -2947,15 +3175,15 @@ function buildExpensePredictionText(transactions: Transaction[], predictedTotal:
   const day = TODAY.getDate();
   const daysInMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0).getDate();
   const remainingDays = Math.max(daysInMonth - day, 0);
-  const averageDaily = day > 0 ? spent / day : 0;
-  const averageActiveDay = activeDays > 0 ? spent / activeDays : 0;
-  const pace = predictedTotal > spent * 1.25 ? "đang tăng nhanh" : predictedTotal < spent * 1.05 ? "khá ổn định" : "đang tăng nhẹ";
 
   if (spent === 0) {
-    return "Tháng này chưa có chi tiêu. Khi có dữ liệu, hệ thống sẽ dự đoán theo tốc độ chi mỗi ngày.";
+    return "Tháng này chưa có chi tiêu. Khi có dữ liệu, hệ thống sẽ dự báo mức chi.";
   }
 
-  return `Nếu giữ tốc độ hiện tại, bạn sẽ chi khoảng ${formatCurrency(predictedTotal)} trong tháng này. Đã chi ${formatCurrency(spent)} qua ${activeDays || 1} ngày có giao dịch; trung bình theo ngày là ${formatCurrency(averageDaily)}, trung bình mỗi ngày phát sinh chi là ${formatCurrency(averageActiveDay)}. Còn ${remainingDays} ngày, nhịp chi ${pace}.`;
+  const safeDaily = remainingDays > 0 ? Math.max((predictedTotal - spent) / remainingDays, 0) : 0;
+  const safeDailyText = safeDaily > 0 ? ` Trung bình nên chi tối đa ${formatCurrency(safeDaily)}/ngày trong ${remainingDays} ngày còn lại.` : "";
+
+  return `Dự kiến tháng này bạn sẽ chi khoảng ${formatCurrency(predictedTotal)}.${safeDailyText}`;
 }
 
 function buildSmartInsight(transactions: Transaction[], scope: "week" | "month" | "year") {
@@ -3286,7 +3514,7 @@ function dateStamp() {
   return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
   flex: { flex: 1 },
   splash: {
     flex: 1,
@@ -4112,3 +4340,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
 });
+
+const cachedStyles = { dark: createStyles(DARK_COLORS), light: createStyles(LIGHT_COLORS) };
