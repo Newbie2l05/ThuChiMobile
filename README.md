@@ -148,3 +148,260 @@
 </table>
 
 ### 📦 Thư viện bổ sung
+
+```
+expo-document-picker    — Chọn file CSV để nhập dữ liệu
+expo-file-system        — Đọc/ghi file hệ thống
+expo-sharing            — Chia sẻ file xuất CSV
+expo-image-picker       — Chọn/chụp ảnh hóa đơn
+expo-notifications      — Nhắc nhở ghi chép
+expo-font               — Font chữ tùy chỉnh
+react-native-svg        — Biểu đồ SVG
+react-native-gesture-handler — Cử chỉ vuốt, kéo thả
+```
+
+---
+
+## 🚀 Cài đặt
+
+### Yêu cầu hệ thống
+
+| Yêu cầu | Phiên bản |
+| :--- | :--- |
+| 📦 Node.js | `20+` hoặc mới hơn |
+| 📱 Expo Go | `54.0.8` |
+| 💻 npm | `9+` |
+
+### Hướng dẫn cài đặt
+
+```bash
+# 1️⃣ Clone repository
+git clone https://github.com/Newbie2l05/ThuChiMobile.git
+
+# 2️⃣ Di chuyển vào thư mục dự án
+cd ThuChiMobile
+
+# 3️⃣ Cài đặt dependencies
+npm install
+
+# 4️⃣ Khởi chạy ứng dụng
+npm start
+```
+
+> 📱 Sau đó mở **Expo Go** trên điện thoại và quét mã QR để chạy ứng dụng.
+
+### Lệnh hữu ích
+
+```bash
+# Chạy trên Android emulator
+npm run android
+
+# Chạy trên iOS simulator
+npm run ios
+
+# Chạy trên trình duyệt web
+npm run web
+
+# Kiểm tra TypeScript
+npm run typecheck
+
+# Kiểm tra health check Expo
+npx expo-doctor
+```
+
+---
+
+## 📂 Cấu trúc dự án
+
+```
+thu-chi-mobile-rn-sdk54/
+├── 📄 App.tsx               # Entry point — toàn bộ logic & UI
+├── 📄 app.json              # Cấu hình Expo (tên app, package, plugins)
+├── 📄 package.json          # Dependencies & scripts
+├── 📄 tsconfig.json         # Cấu hình TypeScript
+├── 📄 babel.config.js       # Cấu hình Babel
+├── 📄 metro.config.js       # Cấu hình Metro bundler
+└── 📄 README.md             # Tài liệu dự án (file này)
+```
+
+### 🏗 Kiến trúc ứng dụng
+
+```
+┌─────────────────────────────────────────────────┐
+│                   App.tsx                        │
+├─────────────────────────────────────────────────┤
+│                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
+│  │ Overview │  │ Calendar │  │  Entry   │      │
+│  │  Screen  │  │  Screen  │  │  Screen  │      │
+│  └──────────┘  └──────────┘  └──────────┘      │
+│                                                  │
+│  ┌──────────┐  ┌──────────┐                     │
+│  │ Reports  │  │   More   │                     │
+│  │  Screen  │  │  Screen  │                     │
+│  └──────────┘  └──────────┘                     │
+│                                                  │
+│  ┌─────────────────────────────────────┐        │
+│  │        Stack Screens                 │        │
+│  │  TransactionEditor · Detail · Search │        │
+│  │  Categories · Wallets · Budgets      │        │
+│  │  SpendingTrend · YearStats           │        │
+│  │  Recurring · Reminder · ChangePin    │        │
+│  │  CurrencyConverter · MonthTx · Today │        │
+│  └─────────────────────────────────────┘        │
+│                                                  │
+│  ┌─────────────────────────────────────┐        │
+│  │          Data Layer                  │        │
+│  │  AsyncStorage · SecureStore          │        │
+│  │  CSV Import/Export · Image Picker    │        │
+│  └─────────────────────────────────────┘        │
+│                                                  │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## 🎨 Thiết kế giao diện
+
+### 🌙 Dark Mode Color Palette
+
+| Vai trò | Màu | Hex |
+| :--- | :---: | :--- |
+| Background | 🟫 | `#131315` |
+| Surface | ⬛ | `#1B1B1D` |
+| Primary | 🔵 | `#ADC6FF` |
+| Income | 💙 | `#79B5FF` |
+| Expense | 🟠 | `#FFB868` |
+| Success | 🟢 | `#7CD992` |
+| Error | 🔴 | `#FF8E85` |
+| Gold (Premium) | 🟡 | `#D4AF37` |
+
+### ☀️ Light Mode Color Palette
+
+| Vai trò | Màu | Hex |
+| :--- | :---: | :--- |
+| Background | ⬜ | `#F5F5F5` |
+| Surface | 🤍 | `#FFFFFF` |
+| Primary | 🔵 | `#0A84FF` |
+| Income | 🟢 | `#34C759` |
+| Expense | 🔴 | `#FF3B30` |
+| Success | 🟢 | `#34C759` |
+| Gold (Premium) | 🟡 | `#FFCC00` |
+
+---
+
+## 💱 Tiền tệ được hỗ trợ
+
+<table>
+  <tr>
+    <td><code>🇻🇳 VND</code></td>
+    <td><code>🇺🇸 USD</code></td>
+    <td><code>🇪🇺 EUR</code></td>
+    <td><code>🇯🇵 JPY</code></td>
+    <td><code>🇰🇷 KRW</code></td>
+    <td><code>🇨🇳 CNY</code></td>
+  </tr>
+  <tr>
+    <td><code>🇹🇭 THB</code></td>
+    <td><code>🇬🇧 GBP</code></td>
+    <td><code>🇦🇺 AUD</code></td>
+    <td><code>🇨🇦 CAD</code></td>
+    <td><code>🇨🇭 CHF</code></td>
+    <td><code>🇸🇬 SGD</code></td>
+  </tr>
+  <tr>
+    <td><code>🇭🇰 HKD</code></td>
+    <td><code>🇮🇳 INR</code></td>
+    <td><code>🇮🇩 IDR</code></td>
+    <td><code>🇲🇾 MYR</code></td>
+    <td><code>🇵🇭 PHP</code></td>
+    <td><code>🇹🇼 TWD</code></td>
+  </tr>
+  <tr>
+    <td><code>🇳🇿 NZD</code></td>
+    <td><code>🇸🇪 SEK</code></td>
+    <td><code>🇳🇴 NOK</code></td>
+    <td><code>🇩🇰 DKK</code></td>
+    <td colspan="2"></td>
+  </tr>
+</table>
+
+---
+
+## 🗂 Danh mục mặc định
+
+### Chi tiêu
+
+| Icon | Tên | Màu |
+| :---: | :--- | :---: |
+| 🍽️ | Ăn uống | `#FA9B00` |
+| 🛍️ | Mua sắm | `#FF7A7A` |
+| 🚗 | Di chuyển | `#8CB6FF` |
+| 🏠 | Nhà cửa | `#C2A4FF` |
+| 🎮 | Giải trí | `#6CE2D9` |
+| ⚪ | Khác | `#AEB4C2` |
+
+### Thu nhập
+
+| Icon | Tên | Màu |
+| :---: | :--- | :---: |
+| 👛 | Lương | `#79B5FF` |
+| 🏆 | Thưởng | `#D4AF37` |
+| 📈 | Đầu tư | `#7CD992` |
+| 💵 | Thu khác | `#AEB4C2` |
+
+---
+
+## 🔒 Bảo mật
+
+- 🔑 **Mã PIN 4 số** — Lưu trữ an toàn qua `expo-secure-store` (mã hóa phần cứng)
+- 🔒 **Tự động khóa** — Khóa app khi chuyển sang background
+- 🛡️ **Dữ liệu cục bộ** — Toàn bộ dữ liệu lưu trên thiết bị, không gửi lên server
+
+---
+
+## 👥 Thành viên
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/Newbie2l05">
+        <img src="https://github.com/Newbie2l05.png" width="100px;" alt="Newbie2l05" style="border-radius:50%"/>
+        <br />
+        <sub><b>Newbie2l05</b></sub>
+      </a>
+      <br />
+      <sub>👨‍💻 Developer</sub>
+    </td>
+  </tr>
+</table>
+
+---
+
+## 📜 Giấy phép
+
+Dự án được phân phối dưới giấy phép **MIT License**.
+
+```
+MIT License
+
+Copyright (c) 2025 Newbie2l05
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software.
+```
+
+---
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Made_with-❤️-red?style=for-the-badge" alt="Made with love"/>
+  <img src="https://img.shields.io/badge/Built_with-React_Native-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="Built with React Native"/>
+  <img src="https://img.shields.io/badge/Powered_by-Expo-4630EB?style=for-the-badge&logo=expo&logoColor=white" alt="Powered by Expo"/>
+</p>
+
+<p align="center">
+  <b>⭐ Nếu bạn thấy dự án hữu ích, hãy cho một Star nhé! ⭐</b>
+</p>
