@@ -618,7 +618,7 @@ export default function App() {
       <GestureHandlerRootView style={styles.flex}>
         <SafeAreaProvider>
           <View style={styles.splash}>
-            <Text style={styles.splashTitle}>Sổ Thu Chi</Text>
+            <Text style={styles.splashTitle}>{t("Sổ Thu Chi")}</Text>
             <Text style={styles.splashText}>Đang tải dữ liệu...</Text>
           </View>
         </SafeAreaProvider>
@@ -840,7 +840,7 @@ function TabsShell({
         name="Overview"
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon label="Tổng quan" icon="grid" color={color} focused={focused} />
+            <TabIcon label={t("Tổng quan")} icon="grid" color={color} focused={focused} />
           ),
         }}
       >
@@ -855,7 +855,7 @@ function TabsShell({
         name="Calendar"
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon label="Lịch" icon="calendar" color={color} focused={focused} />
+            <TabIcon label={t("Lịch")} icon="calendar" color={color} focused={focused} />
           ),
         }}
       >
@@ -870,7 +870,7 @@ function TabsShell({
               style={styles.entryTab}
             >
               <Ionicons name="add" size={22} color={focused ? "#07162F" : COLORS.text} />
-              <Text style={[styles.entryTabLabel, focused && { color: "#07162F" }]}>Nhập vào</Text>
+              <Text style={[styles.entryTabLabel, focused && { color: "#07162F" }]}>{t("Nhập vào")}</Text>
             </LinearGradient>
           ),
         }}
@@ -881,7 +881,7 @@ function TabsShell({
         name="Reports"
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon label="Báo cáo" icon="stats-chart" color={color} focused={focused} />
+            <TabIcon label={t("Báo cáo")} icon="stats-chart" color={color} focused={focused} />
           ),
         }}
       >
@@ -891,7 +891,7 @@ function TabsShell({
         name="More"
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon label="Khác" icon="ellipsis-horizontal" color={color} focused={focused} />
+            <TabIcon label={t("Khác")} icon="ellipsis-horizontal" color={color} focused={focused} />
           ),
         }}
       >
@@ -928,7 +928,7 @@ function OverviewScreen({
   const prediction = predictMonthlyExpense(data.transactions);
 
   return (
-    <Screen title="Tổng quan hôm nay" subtitle="Sổ Thu Chi" profile={data.profile}>
+    <Screen title="Tổng quan hôm nay" subtitle={t("Sổ Thu Chi")} profile={data.profile}>
       <View style={styles.balanceBlock}>
         <Text style={styles.sectionLabel}>Tổng số dư hiện tại</Text>
         <Text style={styles.balanceValue}>{formatCurrency(totals.balance)}</Text>
@@ -969,7 +969,7 @@ function OverviewScreen({
                         styles.chartBar,
                         {
                           height: Math.max(10, ratio * 96),
-                          backgroundColor: item.value > 0 ? COLORS.primary : "rgba(255,255,255,0.08)",
+                          backgroundColor: item.value > 0 ? COLORS.primary : COLORS.surface2,
                         },
                       ]}
                     />
@@ -985,10 +985,10 @@ function OverviewScreen({
       <GlassCard>
         <View style={styles.rowBetween}>
           <Pressable onPress={() => navigation.navigate("TodayTransactions")}>
-            <Text style={styles.cardTitle}>Giao dịch gần đây</Text>
+            <Text style={styles.cardTitle}>{t("Giao dịch gần đây")}</Text>
           </Pressable>
           <Pressable onPress={() => navigation.navigate("TodayTransactions")}>
-            <Text style={styles.linkText}>Hôm nay</Text>
+            <Text style={styles.linkText}>{t("Hôm nay")}</Text>
           </Pressable>
         </View>
 
@@ -1140,7 +1140,7 @@ function ReportsScreen({
   const currentExpense = categorySummary.filter((item) => item.type === "expense").slice(0, 5);
 
   return (
-    <Screen title="Báo cáo" subtitle="Theo dõi xu hướng chi tiêu và thu nhập" profile={data.profile}>
+    <Screen title={t("Báo cáo")} subtitle="Theo dõi xu hướng chi tiêu và thu nhập" profile={data.profile}>
       <Pressable onPress={() => navigation.navigate("YearStats")}>
         <GlassCard>
           <Text style={styles.cardTitle}>6 tháng gần nhất</Text>
@@ -1242,9 +1242,11 @@ function MoreScreen({
   const COLORS = useAppColors();
   const navigation = useNavigation<any>();
   const [premiumCode, setPremiumCode] = useState("");
+  const [modalTarget, setModalTarget] = useState<'language' | 'currency' | null>(null);
+  const codes = Object.keys(CURRENCY_RATES);
 
   return (
-    <Screen title="Khác" subtitle="Cài đặt, dữ liệu và bảo mật" profile={data.profile}>
+    <Screen title={t("Khác")} subtitle={t("Cài đặt, dữ liệu và bảo mật")} profile={data.profile}>
       <GlassCard>
         <View style={styles.rowBetween}>
           <View style={styles.settingsLeft}>
@@ -1268,6 +1270,7 @@ function MoreScreen({
               placeholderTextColor={COLORS.muted}
               style={styles.input}
             />
+            <Text style={{ color: COLORS.muted, fontSize: 13, marginTop: -6, marginBottom: 8, paddingHorizontal: 4 }}>{t("Gợi ý mã: VIP2026, NOADS, NANGCAP, PRO")}</Text>
             <Pressable
               style={styles.primaryAction}
               onPress={() => {
@@ -1283,37 +1286,23 @@ function MoreScreen({
               }}
             >
               <Ionicons name="arrow-up-circle" size={18} color="#07162F" />
-              <Text style={styles.primaryActionText}>Nâng Premium</Text>
+              <Text style={styles.primaryActionText}>{t("Nâng Premium")}</Text>
             </Pressable>
           </>
         )}
       </GlassCard>
 
       <GlassCard>
-        <SettingsRow label="Quản lý danh mục" icon="grid" onPress={() => navigation.navigate("Categories")} />
-        <SettingsRow label="Quản lý ví" icon="wallet" onPress={() => navigation.navigate("Wallets")} />
-        <SettingsRow label="Ngân sách danh mục" icon="speedometer" onPress={() => navigation.navigate("Budgets")} />
-        <SettingsRow label="Giao dịch định kỳ" icon="repeat" onPress={() => navigation.navigate("RecurringTransactions")} />
-        <SettingsRow label="Đổi mã PIN 4 số" icon="lock-closed" onPress={() => navigation.navigate("ChangePin")} />
-        <SettingsRow label="Chuyển đổi tiền tệ" icon="swap-horizontal" onPress={() => navigation.navigate("CurrencyConverter")} />
-        <SettingsToggle
-          label="Ngôn ngữ: Tiếng Anh"
-          icon="language"
-          value={data.language === "en"}
-          onValueChange={(value) => {
-            animateNext();
-            setData((current) => ({ ...current, language: value ? "en" : "vi" }));
-          }}
-        />
-        <SettingsToggle
-          label="Đơn vị tiền tệ: USD"
-          icon="cash-outline"
-          value={data.currency === "USD"}
-          onValueChange={(value) => {
-            animateNext();
-            setData((current) => ({ ...current, currency: value ? "USD" : "VND" }));
-          }}
-        />
+        <SettingsRow label={t("Quản lý danh mục")} icon="grid" onPress={() => navigation.navigate("Categories")} />
+        <SettingsRow label={t("Quản lý ví")} icon="wallet" onPress={() => navigation.navigate("Wallets")} />
+        <SettingsRow label={t("Ngân sách danh mục")} icon="speedometer" onPress={() => navigation.navigate("Budgets")} />
+        <SettingsRow label={t("Giao dịch định kỳ")} icon="repeat" onPress={() => navigation.navigate("RecurringTransactions")} />
+        <SettingsRow label={t("Đổi mã PIN 4 số")} icon="lock-closed" onPress={() => navigation.navigate("ChangePin")} />
+        <SettingsRow label={t("Chuyển đổi tiền tệ")} icon="swap-horizontal" onPress={() => navigation.navigate("CurrencyConverter")} />
+        
+        <SettingsRow label={"Ngôn ngữ: " + (data.language === 'en' ? 'English' : 'Tiếng Việt')} icon="language" onPress={() => setModalTarget('language')} />
+        <SettingsRow label={"Tiền tệ: " + data.currency} icon="cash-outline" onPress={() => setModalTarget('currency')} />
+
         <SettingsToggle
           label="Chế độ sáng"
           icon="sunny"
@@ -1324,7 +1313,7 @@ function MoreScreen({
           }}
         />
         <SettingsToggle
-          label="Bật khóa PIN"
+          label={t("Bật khóa PIN")}
           icon="shield-checkmark"
           value={data.requirePinOnResume}
           onValueChange={(value) => {
@@ -1345,6 +1334,33 @@ function MoreScreen({
         <SettingsRow label="Xuất dữ liệu CSV" icon="download" onPress={() => void exportCsv()} />
         <SettingsRow label="Nhập dữ liệu CSV" icon="cloud-upload" onPress={() => void importCsv()} />
       </GlassCard>
+    
+      <Modal visible={Boolean(modalTarget)} transparent animationType="fade" onRequestClose={() => setModalTarget(null)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setModalTarget(null)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.cardTitle}>{modalTarget === 'language' ? 'Chọn ngôn ngữ' : 'Chọn tiền tệ'}</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {modalTarget === 'language' ? (
+                <>
+                  <Pressable style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: COLORS.border }} onPress={() => { animateNext(); setData((c) => ({ ...c, language: 'vi' })); setModalTarget(null); }}>
+                    <Text style={[styles.label, { fontSize: 16 }, data.language === 'vi' && { color: COLORS.primary, fontWeight: '700' }]}>Tiếng Việt</Text>
+                  </Pressable>
+                  <Pressable style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: COLORS.border }} onPress={() => { animateNext(); setData((c) => ({ ...c, language: 'en' })); setModalTarget(null); }}>
+                    <Text style={[styles.label, { fontSize: 16 }, data.language === 'en' && { color: COLORS.primary, fontWeight: '700' }]}>English</Text>
+                  </Pressable>
+                </>
+              ) : (
+                codes.map((code) => (
+                  <Pressable key={code} style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: COLORS.border }} onPress={() => { animateNext(); setData((c) => ({ ...c, currency: code })); setModalTarget(null); }}>
+                    <Text style={[styles.label, { fontSize: 16 }, data.currency === code && { color: COLORS.primary, fontWeight: '700' }]}>{code}</Text>
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
     </Screen>
   );
 }
@@ -1397,9 +1413,9 @@ function TransactionDetailScreen({
 
   if (!transaction) {
     return (
-      <Screen title="Chi tiết" subtitle="Không tìm thấy giao dịch" profile={data.profile}>
+      <Screen title={t("Chi tiết")} subtitle="Không tìm thấy giao dịch" profile={data.profile}>
         <GlassCard>
-          <Text style={styles.emptyText}>Giao dịch không còn tồn tại.</Text>
+          <Text style={styles.emptyText}>{t("Giao dịch không còn tồn tại.")}</Text>
         </GlassCard>
       </Screen>
     );
@@ -1419,10 +1435,10 @@ function TransactionDetailScreen({
         </View>
 
         <DetailRow label="Loại giao dịch" value={transaction.type === "income" ? "Thu nhập" : "Chi tiêu"} />
-        <DetailRow label="Ví" value={getWalletName(data.wallets, transaction.account)} />
+        <DetailRow label={t("Ví")} value={getWalletName(data.wallets, transaction.account)} />
         <DetailRow label="Ngày nhập" value={formatDate(transaction.date)} />
         <DetailRow label="Giờ nhập" value={new Date(transaction.date).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} />
-        <DetailRow label="Ghi chú" value={transaction.note || "Không có"} />
+        <DetailRow label={t("Ghi chú")} value={transaction.note || "Không có"} />
         <DetailRow label="Ảnh hóa đơn" value={`${transaction.images.length} ảnh`} />
       </GlassCard>
 
@@ -1452,7 +1468,7 @@ function TransactionDetailScreen({
 
       <View style={styles.actionRow}>
         <Pressable
-          style={[styles.secondaryAction, { borderColor: "rgba(255,142,133,0.25)" }]}
+          style={[styles.secondaryAction, { borderColor: COLORS.error }]}
           onPress={() =>
             Alert.alert("Xóa giao dịch", "Bạn chắc chắn muốn xóa giao dịch này?", [
               { text: "Hủy" },
@@ -1468,7 +1484,7 @@ function TransactionDetailScreen({
           }
         >
           <Ionicons name="trash-outline" size={18} color={COLORS.error} />
-          <Text style={[styles.secondaryActionText, { color: COLORS.error }]}>Xóa</Text>
+          <Text style={[styles.secondaryActionText, { color: COLORS.error }]}>{t("Xóa")}</Text>
         </Pressable>
 
         <Pressable
@@ -1506,21 +1522,21 @@ function WalletsScreen({
   };
 
   return (
-    <Screen title="Quản lý ví" subtitle="Theo dõi tiền mặt và các ví khác" profile={{ name: "", initials: "" }}>
+    <Screen title={t("Quản lý ví")} subtitle="Theo dõi tiền mặt và các ví khác" profile={{ name: "", initials: "" }}>
       <GlassCard>
         <Text style={styles.cardTitle}>{editing ? "Sửa ví" : "Thêm ví"}</Text>
         <TextInput
           editable={!editing?.lockedName}
           value={editing?.lockedName ? editing.name : name}
           onChangeText={setName}
-          placeholder="Tên ví"
+          placeholder={t("Tên ví")}
           placeholderTextColor={COLORS.muted}
           style={[styles.input, editing?.lockedName && styles.inputDisabled]}
         />
         <TextInput
           value={formatInputAmount(balance)}
           onChangeText={(text) => setBalance(text.replace(/[^\d]/g, ""))}
-          keyboardType="number-pad"
+          keyboardType="decimal-pad"
           placeholder="0đ"
           placeholderTextColor={COLORS.muted}
           style={styles.input}
@@ -1570,7 +1586,7 @@ function WalletsScreen({
       </GlassCard>
 
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
-        <Text style={styles.secondaryActionText}>Quay lại</Text>
+        <Text style={styles.secondaryActionText}>{t("Quay lại")}</Text>
       </Pressable>
     </Screen>
   );
@@ -1617,7 +1633,7 @@ function SpendingTrendScreen({
       </GlassCard>
 
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
-        <Text style={styles.secondaryActionText}>Quay lại</Text>
+        <Text style={styles.secondaryActionText}>{t("Quay lại")}</Text>
       </Pressable>
     </Screen>
   );
@@ -1662,7 +1678,7 @@ function YearStatsScreen({
         <Text style={styles.emptyText}>{buildSmartInsight(data.transactions.filter((item) => new Date(item.date).getFullYear() === year), "year")}</Text>
       </GlassCard>
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
-        <Text style={styles.secondaryActionText}>Quay lại</Text>
+        <Text style={styles.secondaryActionText}>{t("Quay lại")}</Text>
       </Pressable>
     </Screen>
   );
@@ -1701,7 +1717,7 @@ function TodayTransactionsScreen({
         )}
       </GlassCard>
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
-        <Text style={styles.secondaryActionText}>Quay lại</Text>
+        <Text style={styles.secondaryActionText}>{t("Quay lại")}</Text>
       </Pressable>
     </Screen>
   );
@@ -1729,7 +1745,7 @@ function MonthTransactionsScreen({
     <Screen title={categoryName ? `Chi tiêu: ${categoryName}` : "Thu chi tháng này"} subtitle={monthLabel(TODAY)} profile={{ name: "", initials: "" }}>
       <GlassCard>
         {monthItems.length === 0 ? (
-          <Text style={styles.emptyText}>Tháng này chưa có giao dịch.</Text>
+          <Text style={styles.emptyText}>{t("Tháng này chưa có giao dịch.")}</Text>
         ) : (
           <ScrollView style={{ maxHeight: 500 }}>
             {monthItems.map((item) => (
@@ -1746,7 +1762,7 @@ function MonthTransactionsScreen({
         )}
       </GlassCard>
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
-        <Text style={styles.secondaryActionText}>Quay lại</Text>
+        <Text style={styles.secondaryActionText}>{t("Quay lại")}</Text>
       </Pressable>
     </Screen>
   );
@@ -1802,10 +1818,10 @@ function CurrencyConverterScreen({
   const styles = useAppStyles();
   const COLORS = useAppColors();
   return (
-    <Screen title="Chuyển đổi tiền tệ" subtitle="Tỉ giá tham khảo theo ngày" profile={{ name: "", initials: "" }}>
+    <Screen title={t("Chuyển đổi tiền tệ")} subtitle="Tỉ giá tham khảo theo ngày" profile={{ name: "", initials: "" }}>
       <CurrencyConverterCard />
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
-        <Text style={styles.secondaryActionText}>Quay lại</Text>
+        <Text style={styles.secondaryActionText}>{t("Quay lại")}</Text>
       </Pressable>
     </Screen>
   );
@@ -1833,12 +1849,12 @@ function BudgetsScreen({
   const beginEdit = (budget?: Budget) => {
     setEditing(budget ?? null);
     setCategoryId(budget?.categoryId ?? expenseCategories[0]?.id ?? "");
-    setLimit(budget ? String(budget.monthlyLimit) : "");
+    setLimit(budget ? String(Math.round(convertToGlobalCurrency(budget.monthlyLimit) * 100) / 100) : "");
     setWarnAt(budget ? String(Math.round(budget.warnAt * 100)) : "80");
   };
 
   return (
-    <Screen title="Ngân sách" subtitle="Cảnh báo khi gần vượt hạn mức" profile={{ name: "", initials: "" }}>
+    <Screen title={t("Ngân sách")} subtitle={t("Cảnh báo khi gần vượt hạn mức")} profile={{ name: "", initials: "" }}>
       <GlassCard>
         <Text style={styles.cardTitle}>{editing ? "Sửa ngân sách" : "Thêm ngân sách"}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -1856,10 +1872,10 @@ function BudgetsScreen({
           </View>
         </ScrollView>
         <TextInput
-          value={limit ? new Intl.NumberFormat("vi-VN").format(Number(limit)) : ""}
-          onChangeText={(text) => setLimit(text.replace(/[^\d]/g, ""))}
-          keyboardType="number-pad"
-          placeholder="Hạn mức tháng"
+          value={limit}
+          onChangeText={(text) => setLimit(text.replace(/[^0-9.]/g, ""))}
+          keyboardType="decimal-pad"
+          placeholder={t("Hạn mức tháng")}
           placeholderTextColor={COLORS.muted}
           style={styles.input}
         />
@@ -1867,23 +1883,24 @@ function BudgetsScreen({
           value={warnAt}
           onChangeText={(text) => setWarnAt(text.replace(/[^\d]/g, "").slice(0, 3))}
           keyboardType="number-pad"
-          placeholder="Cảnh báo ở %"
+          placeholder={t("Cảnh báo ở %")}
           placeholderTextColor={COLORS.muted}
           style={styles.input}
         />
         <Pressable
           style={styles.primaryAction}
           onPress={() => {
-            const parsedLimit = Number(limit);
+            const parsedLimit = parseFloat(limit) || 0;
+            const finalLimit = Math.round(convertToBaseCurrency(parsedLimit));
             const parsedWarn = Number(warnAt);
-            if (!categoryId || !parsedLimit) {
+            if (!categoryId || !finalLimit) {
               Alert.alert("Thiếu dữ liệu", "Chọn danh mục và nhập hạn mức.");
               return;
             }
             saveBudget({
               id: editing?.id,
               categoryId,
-              monthlyLimit: parsedLimit,
+              monthlyLimit: finalLimit,
               warnAt: Math.min(Math.max(parsedWarn || 80, 1), 100) / 100,
             });
             beginEdit();
@@ -1924,7 +1941,7 @@ function BudgetsScreen({
       </GlassCard>
 
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
-        <Text style={styles.secondaryActionText}>Quay lại</Text>
+        <Text style={styles.secondaryActionText}>{t("Quay lại")}</Text>
       </Pressable>
     </Screen>
   );
@@ -1968,16 +1985,16 @@ function RecurringTransactionsScreen({
   }, [categories, categoryId]);
 
   return (
-    <Screen title="Giao dịch định kỳ" subtitle="Tự tạo giao dịch mỗi tháng" profile={{ name: "", initials: "" }}>
+    <Screen title={t("Giao dịch định kỳ")} subtitle="Tự tạo giao dịch mỗi tháng" profile={{ name: "", initials: "" }}>
       <GlassCard>
         <Text style={styles.cardTitle}>{editing ? "Sửa định kỳ" : "Thêm định kỳ"}</Text>
         <View style={styles.segment}>
-          <SegmentButton label="Chi tiêu" active={type === "expense"} onPress={() => setType("expense")} />
-          <SegmentButton label="Thu nhập" active={type === "income"} onPress={() => setType("income")} />
+          <SegmentButton label={t("Chi tiêu")} active={type === "expense"} onPress={() => setType("expense")} />
+          <SegmentButton label={t("Thu nhập")} active={type === "income"} onPress={() => setType("income")} />
         </View>
-        <TextInput value={amount} onChangeText={(text) => setAmount(text.replace(/[^\d]/g, ""))} keyboardType="number-pad" placeholder="Số tiền" placeholderTextColor={COLORS.muted} style={styles.input} />
+        <TextInput value={amount} onChangeText={(text) => setAmount(text.replace(/[^\d]/g, ""))} keyboardType="number-pad" placeholder={t("Số tiền")} placeholderTextColor={COLORS.muted} style={styles.input} />
         <TextInput value={day} onChangeText={(text) => setDay(text.replace(/[^\d]/g, "").slice(0, 2))} keyboardType="number-pad" placeholder="Ngày trong tháng" placeholderTextColor={COLORS.muted} style={styles.input} />
-        <TextInput value={note} onChangeText={setNote} placeholder="Ghi chú" placeholderTextColor={COLORS.muted} style={styles.input} />
+        <TextInput value={note} onChangeText={setNote} placeholder={t("Ghi chú")} placeholderTextColor={COLORS.muted} style={styles.input} />
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.categoryChoices}>
             {categories.map((item) => (
@@ -2007,7 +2024,7 @@ function RecurringTransactionsScreen({
             saveRecurring({
               id: editing?.id,
               type,
-              amount: parsedAmount,
+              amount: Math.round(convertToBaseCurrency(parsedAmount)),
               categoryId,
               walletId,
               dayOfMonth: parsedDay,
@@ -2047,7 +2064,7 @@ function RecurringTransactionsScreen({
       </GlassCard>
 
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
-        <Text style={styles.secondaryActionText}>Quay lại</Text>
+        <Text style={styles.secondaryActionText}>{t("Quay lại")}</Text>
       </Pressable>
     </Screen>
   );
@@ -2080,10 +2097,10 @@ function CategoriesScreen({
   const filtered = categories.filter((item) => item.type === type);
 
   return (
-    <Screen title="Quản lý danh mục" subtitle="Đồng bộ danh mục cho toàn app" profile={{ name: "", initials: "NA" }}>
+    <Screen title={t("Quản lý danh mục")} subtitle="Đồng bộ danh mục cho toàn app" profile={{ name: "", initials: "NA" }}>
       <View style={styles.segment}>
-        <SegmentButton label="Chi tiêu" active={type === "expense"} onPress={() => setType("expense")} />
-        <SegmentButton label="Thu nhập" active={type === "income"} onPress={() => setType("income")} />
+        <SegmentButton label={t("Chi tiêu")} active={type === "expense"} onPress={() => setType("expense")} />
+        <SegmentButton label={t("Thu nhập")} active={type === "income"} onPress={() => setType("income")} />
       </View>
 
       <GlassCard>
@@ -2120,7 +2137,7 @@ function CategoriesScreen({
             setName("");
           }}
         >
-          <Text style={styles.primaryActionText}>Thêm danh mục</Text>
+          <Text style={styles.primaryActionText}>{t("Thêm danh mục")}</Text>
         </Pressable>
       </GlassCard>
 
@@ -2145,7 +2162,7 @@ function CategoriesScreen({
       </GlassCard>
 
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
-        <Text style={styles.secondaryActionText}>Quay lại</Text>
+        <Text style={styles.secondaryActionText}>{t("Quay lại")}</Text>
       </Pressable>
     </Screen>
   );
@@ -2189,7 +2206,7 @@ function ChangePinScreen({
             navigation.goBack();
           }}
         >
-          <Text style={styles.primaryActionText}>Lưu PIN mới</Text>
+          <Text style={styles.primaryActionText}>{t("Lưu PIN mới")}</Text>
         </Pressable>
         <Pressable
           style={styles.secondaryAction}
@@ -2198,7 +2215,7 @@ function ChangePinScreen({
             navigation.goBack();
           }}
         >
-          <Text style={styles.secondaryActionText}>Gỡ mã PIN</Text>
+          <Text style={styles.secondaryActionText}>{t("Gỡ mã PIN")}</Text>
         </Pressable>
       </GlassCard>
     </Screen>
@@ -2226,7 +2243,7 @@ function TransactionForm({
   const COLORS = useAppColors();
   const existing = data.transactions.find((item) => item.id === transactionId);
   const [type, setType] = useState<TransactionType>(existing?.type ?? defaultType ?? "expense");
-  const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
+  const [amount, setAmount] = useState(existing ? String(Math.round(convertToGlobalCurrency(existing.amount) * 100) / 100) : "");
   const [categoryId, setCategoryId] = useState(
     existing?.categoryId ?? data.categories.find((item) => item.type === (existing?.type ?? defaultType ?? "expense"))?.id ?? data.categories[0]?.id
   );
@@ -2270,16 +2287,16 @@ function TransactionForm({
   return (
     <View style={styles.formWrap}>
       <View style={styles.segment}>
-        <SegmentButton label="Chi tiêu" active={type === "expense"} onPress={() => setType("expense")} />
-        <SegmentButton label="Thu nhập" active={type === "income"} onPress={() => setType("income")} />
+        <SegmentButton label={t("Chi tiêu")} active={type === "expense"} onPress={() => setType("expense")} />
+        <SegmentButton label={t("Thu nhập")} active={type === "income"} onPress={() => setType("income")} />
       </View>
 
       <GlassCard>
-        <Text style={styles.label}>Số tiền</Text>
+        <Text style={styles.label}>{t("Số tiền")}</Text>
         <TextInput
           value={amount}
-          onChangeText={(text) => setAmount(text.replace(/[^\d]/g, ""))}
-          keyboardType="number-pad"
+          onChangeText={(text) => setAmount(text.replace(/[^0-9.]/g, ""))}
+          keyboardType="decimal-pad"
           placeholder="0"
           placeholderTextColor={COLORS.muted}
           style={styles.amountInput}
@@ -2289,7 +2306,7 @@ function TransactionForm({
 
       <GlassCard>
         <View style={styles.rowBetween}>
-          <Text style={styles.label}>Danh mục</Text>
+          <Text style={styles.label}>{t("Danh mục")}</Text>
           <Pressable
             style={styles.inlineIconButton}
             onPress={() => {
@@ -2329,7 +2346,7 @@ function TransactionForm({
       </GlassCard>
 
       <GlassCard>
-        <Text style={styles.label}>Ghi chú</Text>
+        <Text style={styles.label}>{t("Ghi chú")}</Text>
         <TextInput
           value={note}
           onChangeText={setNote}
@@ -2338,7 +2355,7 @@ function TransactionForm({
           style={styles.input}
         />
 
-        <Text style={styles.label}>Ngày giao dịch</Text>
+        <Text style={styles.label}>{t("Ngày giao dịch")}</Text>
         <TextInput
           value={date}
           onChangeText={setDate}
@@ -2347,7 +2364,7 @@ function TransactionForm({
           style={styles.input}
         />
 
-        <Text style={styles.label}>Ví</Text>
+        <Text style={styles.label}>{t("Ví")}</Text>
         <View style={styles.accountRow}>
           {data.wallets.map((item) => (
             <Pressable
@@ -2362,11 +2379,11 @@ function TransactionForm({
           ))}
         </View>
 
-        <Text style={styles.label}>Hóa đơn / ảnh đính kèm</Text>
+        <Text style={styles.label}>{t("Hóa đơn / ảnh đính kèm")}</Text>
         <View style={styles.imageActions}>
           <Pressable style={styles.secondaryAction} onPress={() => void pickImage()}>
             <Ionicons name="images-outline" size={16} color={COLORS.text} />
-            <Text style={styles.secondaryActionText}>Chọn ảnh</Text>
+            <Text style={styles.secondaryActionText}>{t("Chọn ảnh")}</Text>
           </Pressable>
           <Text style={styles.transactionMeta}>{images.length} ảnh đã chọn</Text>
         </View>
@@ -2376,7 +2393,8 @@ function TransactionForm({
         style={styles.primaryAction}
         onPress={() => {
           const parsedAmount = Number(amount);
-          if (!parsedAmount || !categoryId || !date) {
+          const finalAmount = Math.round(convertToBaseCurrency(parsedAmount));
+          if (!finalAmount || !categoryId || !date) {
             Alert.alert("Thiếu dữ liệu", "Vui lòng nhập đủ số tiền, ngày và danh mục.");
             return;
           }
@@ -2384,7 +2402,7 @@ function TransactionForm({
           saveTransaction({
             id: existing?.id,
             type,
-            amount: parsedAmount,
+            amount: finalAmount,
             categoryId,
             note: note.trim(),
             account,
@@ -2455,7 +2473,7 @@ function TransactionForm({
             </Pressable>
             {editingCategory && (
               <Pressable
-                style={[styles.secondaryAction, { borderColor: "rgba(255,142,133,0.25)" }]}
+                style={[styles.secondaryAction, { borderColor: COLORS.error }]}
                 onPress={() => {
                   deleteCategory(editingCategory.id);
                   setCategoryModalOpen(false);
@@ -2730,12 +2748,12 @@ function CurrencyConverterCard() {
 
   return (
     <GlassCard>
-      <Text style={styles.cardTitle}>Chuyển đổi tiền tệ</Text>
+      <Text style={styles.cardTitle}>{t("Chuyển đổi tiền tệ")}</Text>
       <TextInput
         value={amount}
         onChangeText={(text) => setAmount(text.replace(/[^\d.]/g, ""))}
         keyboardType="decimal-pad"
-        placeholder="Số tiền"
+        placeholder={t("Số tiền")}
         placeholderTextColor={COLORS.muted}
         style={styles.input}
       />
@@ -2754,7 +2772,7 @@ function CurrencyConverterCard() {
       <Modal visible={Boolean(pickerTarget)} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.cardTitle}>Chọn tiền tệ</Text>
+            <Text style={styles.cardTitle}>{t("Chọn tiền tệ")}</Text>
             <ScrollView style={styles.currencyList}>
               {codes.map((code) => (
                 <Pressable
@@ -2868,7 +2886,7 @@ function CategoryIcon({
           height: size,
           borderRadius: size / 2,
           backgroundColor: `${category?.color ?? COLORS.primary}22`,
-          borderColor: active ? category?.color ?? COLORS.primary : "rgba(255,255,255,0.08)",
+          borderColor: active ? category?.color ?? COLORS.primary : COLORS.border,
         },
       ]}
     >
@@ -3091,19 +3109,113 @@ function setGlobalFormatting(currency: string, language: string) {
   globalLanguage = language;
 }
 
+
+
+const EN_DICT: Record<string, string> = {
+  "Tổng quan": "Overview",
+  "Lịch": "Calendar",
+  "Nhập vào": "Entry",
+  "Báo cáo": "Reports",
+  "Khác": "More",
+  "Số dư hiện tại": "Current Balance",
+  "Chi tiêu tháng này": "Expense this month",
+  "Giao dịch gần đây": "Recent Transactions",
+  "Tất cả": "All",
+  "Sổ Thu Chi": "Money Manager",
+  "Quản lý danh mục": "Manage Categories",
+  "Quản lý ví": "Manage Wallets",
+  "Ngân sách danh mục": "Budgets",
+  "Giao dịch định kỳ": "Recurring",
+  "Đổi mã PIN 4 số": "Change PIN",
+  "Chuyển đổi tiền tệ": "Currency Converter",
+  "Cài đặt, dữ liệu và bảo mật": "Settings, data & security",
+  "Bật khóa PIN": "Enable PIN Lock",
+  "Nhập mã để nâng cấp": "Enter code to upgrade",
+  "Nâng Premium": "Upgrade Premium",
+  "Thêm giao dịch": "Add Transaction",
+  "Cập nhật giao dịch": "Update Transaction",
+  "Lưu giao dịch": "Save Transaction",
+  "Số tiền": "Amount",
+  "Danh mục": "Category",
+  "Ghi chú": "Note",
+  "Ngày giao dịch": "Date",
+  "Ví": "Wallet",
+  "Hóa đơn / ảnh đính kèm": "Invoice / Attached photos",
+  "Chi tiêu": "Expense",
+  "Thu nhập": "Income",
+  "Thêm danh mục": "Add Category",
+  "Sửa danh mục": "Edit Category",
+  "Ngân sách": "Budget",
+  "Hạn mức tháng": "Monthly limit",
+  "Cảnh báo ở %": "Alert at %",
+  "Cảnh báo khi gần vượt hạn mức": "Alert when near limit",
+  "Tháng này chưa có giao dịch.": "No transactions this month.",
+  "Chưa có giao dịch nào.": "No transactions yet.",
+  "Quay lại": "Back",
+  "Chọn ảnh": "Select photo",
+  "Chọn ngôn ngữ": "Select language",
+  "Chọn tiền tệ": "Select currency",
+  "Gợi ý mã: VIP2026, NOADS, NANGCAP, PRO": "Promo codes: VIP2026, NOADS, NANGCAP, PRO",
+  "Nhập mã PIN hiện tại": "Enter current PIN",
+  "Nhập mã PIN mới": "Enter new PIN",
+  "Vui lòng nhập mã PIN để mở khóa": "Please enter PIN to unlock",
+  "Mở khóa": "Unlock",
+  "Lưu PIN mới": "Save new PIN",
+  "Gỡ mã PIN": "Remove PIN",
+  "Hôm nay": "Today",
+  "Chưa có giao dịch trong ngày.": "No transactions today.",
+  "Còn lại": "Left",
+  "Đã chi": "Spent",
+  "Giao dịch không còn tồn tại.": "Transaction no longer exists.",
+  "Chi tiết": "Details",
+  "Xóa giao dịch": "Delete transaction",
+  "Sửa giao dịch": "Edit transaction",
+  "Thêm ví": "Add Wallet",
+  "Sửa ví": "Edit Wallet",
+  "Tên ví": "Wallet name",
+  "Số dư ban đầu": "Initial balance",
+  "Lưu ví": "Save wallet",
+  "Tạo PIN": "Create PIN",
+  "Hủy": "Cancel",
+  "Xóa": "Delete",
+};
+
+function t(str: string) {
+  if (globalLanguage === "en") {
+    return EN_DICT[str] || str;
+  }
+  return str;
+}
+
+function convertToGlobalCurrency(value: number) {
+  if (globalCurrency === "VND") return value;
+  const rateVND = CURRENCY_RATES.VND;
+  const rateTarget = CURRENCY_RATES[globalCurrency];
+  if (!rateTarget) return value;
+  return (value / rateVND) * rateTarget;
+}
+
+function convertToBaseCurrency(value: number) {
+  if (globalCurrency === "VND") return value;
+  const rateVND = CURRENCY_RATES.VND;
+  const rateTarget = CURRENCY_RATES[globalCurrency];
+  if (!rateTarget) return value;
+  return (value / rateTarget) * rateVND;
+}
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat(globalLanguage === "vi" ? "vi-VN" : "en-US", {
     style: "currency",
     currency: globalCurrency,
     maximumFractionDigits: globalCurrency === "VND" ? 0 : 2,
-  }).format(value);
+  }).format(convertToGlobalCurrency(value));
 }
 
 function formatCompact(value: number) {
   return new Intl.NumberFormat(globalLanguage === "vi" ? "vi-VN" : "en-US", {
     notation: "compact",
     maximumFractionDigits: 1,
-  }).format(value);
+  }).format(convertToGlobalCurrency(value));
 }
 
 function formatNumber(value: number) {
@@ -3589,7 +3701,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: COLORS.surface2,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
@@ -3622,7 +3734,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     marginTop: 4,
   },
   glassCard: {
-    backgroundColor: "rgba(31,31,33,0.72)",
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 24,
@@ -3654,7 +3766,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     height: 96,
     width: 20,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: COLORS.surface2,
     justifyContent: "flex-end",
     overflow: "hidden",
   },
@@ -3762,7 +3874,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     right: 16,
     bottom: 16,
     borderRadius: 30,
-    backgroundColor: "rgba(31,31,33,0.94)",
+    backgroundColor: COLORS.surface,
     borderTopWidth: 0,
     elevation: 0,
     borderWidth: 1,
@@ -3778,7 +3890,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     borderRadius: 14,
   },
   tabIconWrapActive: {
-    backgroundColor: "rgba(173,198,255,0.10)",
+    backgroundColor: COLORS.surface2,
   },
   tabLabel: {
     fontSize: 9,
@@ -3820,12 +3932,12 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: COLORS.surface3,
   },
   dayCellActive: {
-    backgroundColor: "rgba(173,198,255,0.18)",
+    backgroundColor: COLORS.surface2,
     borderWidth: 1,
-    borderColor: "rgba(173,198,255,0.26)",
+    borderColor: COLORS.primary,
   },
   dayCellOutside: {
     opacity: 0.35,
@@ -3893,9 +4005,9 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
   },
   amountInput: {
     color: COLORS.primary,
-    fontSize: 34,
+    fontSize: 24,
     fontWeight: "700",
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
   amountPreview: {
     color: COLORS.muted,
@@ -3904,6 +4016,13 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
   },
   inputDisabled: {
     opacity: 0.6,
+  },
+  incomeItem: {
+    backgroundColor: COLORS.surface2,
+    borderRadius: 16,
+    color: COLORS.text,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   input: {
     backgroundColor: COLORS.surface3,
@@ -3922,7 +4041,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(173,198,255,0.12)",
+    backgroundColor: COLORS.surface2,
   },
   categoryChoice: {
     alignItems: "center",
@@ -3930,13 +4049,13 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     minWidth: 88,
     padding: 12,
     borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: COLORS.surface3,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: COLORS.border,
   },
   categoryChoiceActive: {
-    borderColor: "rgba(173,198,255,0.28)",
-    backgroundColor: "rgba(173,198,255,0.12)",
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.surface2,
   },
   categoryChoiceText: {
     color: COLORS.muted,
@@ -3958,9 +4077,9 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     backgroundColor: COLORS.surface3,
   },
   accountChipActive: {
-    backgroundColor: "rgba(173,198,255,0.16)",
+    backgroundColor: COLORS.surface2,
     borderWidth: 1,
-    borderColor: "rgba(173,198,255,0.26)",
+    borderColor: COLORS.primary,
   },
   accountChipText: {
     color: COLORS.muted,
@@ -4036,7 +4155,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
   monthBarTrack: {
     width: 28,
     height: 128,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: COLORS.surface2,
     borderRadius: 14,
     justifyContent: "flex-end",
     overflow: "hidden",
@@ -4063,7 +4182,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     gap: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.05)",
+    borderBottomColor: COLORS.border,
   },
   budgetRow: {
     flexDirection: "row",
@@ -4072,12 +4191,12 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     gap: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.05)",
+    borderBottomColor: COLORS.border,
   },
   progressTrack: {
     height: 7,
     borderRadius: 7,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: COLORS.surface2,
     marginTop: 8,
     overflow: "hidden",
   },
@@ -4119,7 +4238,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: COLORS.surface3,
   },
   trend30Row: {
     flexDirection: "row",
@@ -4137,7 +4256,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     borderRadius: 12,
     justifyContent: "flex-end",
     overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: COLORS.surface2,
   },
   trend30Bar: {
     width: "100%",
@@ -4162,7 +4281,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
   currencyOption: {
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.06)",
+    borderBottomColor: COLORS.border,
   },
   profileCard: {
     flexDirection: "row",
@@ -4203,7 +4322,7 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.05)",
+    borderTopColor: COLORS.border,
     paddingTop: 12,
   },
   actionRow: {
@@ -4307,9 +4426,9 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: COLORS.surface3,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: COLORS.border,
   },
   keypadKeyBlank: {
     backgroundColor: "transparent",
