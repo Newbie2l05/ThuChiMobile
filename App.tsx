@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   AppState,
+  Image,
+  LayoutAnimation,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StatusBar as RNStatusBar,
@@ -12,6 +15,7 @@ import {
   Switch,
   Text,
   TextInput,
+  UIManager,
   View,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -53,6 +57,13 @@ type Transaction = {
   images: string[];
 };
 
+type Wallet = {
+  id: string;
+  name: string;
+  balance: number;
+  lockedName?: boolean;
+};
+
 type AppData = {
   profile: {
     name: string;
@@ -60,6 +71,7 @@ type AppData = {
   };
   categories: Category[];
   transactions: Transaction[];
+  wallets: Wallet[];
   currency: string;
   requirePinOnResume: boolean;
   isPremium: boolean;
@@ -71,6 +83,8 @@ type RootStackParamList = {
   TransactionDetail: { transactionId: string };
   Categories: undefined;
   ChangePin: undefined;
+  Wallets: undefined;
+  SpendingTrend: undefined;
 };
 
 type TabParamList = {
@@ -83,7 +97,11 @@ type TabParamList = {
 
 const STORAGE_KEY = "thu_chi_app_data_v1";
 const PIN_KEY = "thu_chi_pin_v1";
-const ACCOUNTS = ["Tiền mặt", "Ngân hàng", "Ví điện tử"];
+const DEFAULT_WALLETS: Wallet[] = [
+  { id: "cash", name: "Tiền mặt", balance: 5000000, lockedName: true },
+  { id: "bank", name: "Ngân hàng", balance: 25000000 },
+  { id: "ewallet", name: "Ví điện tử", balance: 1000000 },
+];
 
 const COLORS = {
   background: "#131315",
@@ -134,13 +152,22 @@ const INITIAL_DATA: AppData = {
   },
   categories: DEFAULT_CATEGORIES,
   transactions: DEFAULT_TRANSACTIONS,
+  wallets: DEFAULT_WALLETS,
   currency: "VND",
-  requirePinOnResume: true,
+  requirePinOnResume: false,
   isPremium: false,
 };
 
 const Tab = createBottomTabNavigator<TabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+if (Platform.OS === "android") {
+  UIManager.setLayoutAnimationEnabledExperimental?.(true);
+}
+
+function animateNext() {
+  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+}
 
 export default function App() {
   const [data, setData] = useState<AppData>(INITIAL_DATA);
@@ -156,15 +183,15 @@ export default function App() {
         const saved = await AsyncStorage.getItem(STORAGE_KEY);
         const savedPin = await SecureStore.getItemAsync(PIN_KEY);
 
-        if (saved) {
-          setData(normalizeData(JSON.parse(saved) as Partial<AppData>));
-        }
+        const nextData = saved ? normalizeData(JSON.parse(saved) as Partial<AppData>) : INITIAL_DATA;
+        setData(nextData);
 
-        if (savedPin) {
+        if (savedPin && nextData.requirePinOnResume) {
           setPin(savedPin);
           setLocked(true);
         } else {
-          setLocked(true);
+          setPin(savedPin);
+          setLocked(false);
         }
       } finally {
         setBooting(false);
@@ -214,8 +241,10 @@ export default function App() {
       id: payload.id ?? `tx_${Date.now()}_${Math.round(Math.random() * 1000)}`,
     };
 
+    animateNext();
     setData((current) => {
-      const exists = current.transactions.some((item) => item.id === next.id);
+      const previous = current.transactions.find((item) => item.id === next.id);
+      const exists = Boolean(previous);
       const transactions = exists
         ? current.transactions.map((item) => (item.id === next.id ? next : item))
         : [next, ...current.transactions];
@@ -223,15 +252,21 @@ export default function App() {
       return {
         ...current,
         transactions: sortTransactions(transactions),
+        wallets: applyWalletChanges(current.wallets, previous, next),
       };
     });
   };
 
   const deleteTransaction = (transactionId: string) => {
-    setData((current) => ({
-      ...current,
-      transactions: current.transactions.filter((item) => item.id !== transactionId),
-    }));
+    animateNext();
+    setData((current) => {
+      const previous = current.transactions.find((item) => item.id === transactionId);
+      return {
+        ...current,
+        transactions: current.transactions.filter((item) => item.id !== transactionId),
+        wallets: applyWalletChanges(current.wallets, previous, undefined),
+      };
+    });
   };
 
   const saveCategory = (input: Omit<Category, "id"> & { id?: string }) => {
@@ -240,6 +275,7 @@ export default function App() {
       id: input.id ?? `cat_${Date.now()}_${Math.round(Math.random() * 1000)}`,
     };
 
+    animateNext();
     setData((current) => {
       const exists = current.categories.some((item) => item.id === next.id);
       return {
@@ -258,9 +294,42 @@ export default function App() {
       return;
     }
 
+    animateNext();
     setData((current) => ({
       ...current,
       categories: current.categories.filter((item) => item.id !== categoryId),
+    }));
+  };
+
+  const saveWallet = (input: Omit<Wallet, "id"> & { id?: string }) => {
+    const next: Wallet = {
+      ...input,
+      id: input.id ?? `wallet_${Date.now()}_${Math.round(Math.random() * 1000)}`,
+    };
+
+    animateNext();
+    setData((current) => {
+      const exists = current.wallets.some((item) => item.id === next.id);
+      return {
+        ...current,
+        wallets: exists
+          ? current.wallets.map((item) => (item.id === next.id ? { ...next, lockedName: item.lockedName } : item))
+          : [...current.wallets, next],
+      };
+    });
+  };
+
+  const deleteWallet = (walletId: string) => {
+    const linked = data.transactions.some((item) => resolveWalletId(data.wallets, item.account) === walletId);
+    if (linked || walletId === "cash") {
+      Alert.alert("Không thể xóa ví", "Ví này đang có giao dịch hoặc là ví mặc định.");
+      return;
+    }
+
+    animateNext();
+    setData((current) => ({
+      ...current,
+      wallets: current.wallets.filter((item) => item.id !== walletId),
     }));
   };
 
@@ -318,12 +387,14 @@ export default function App() {
   const setOrChangePin = async (nextPin: string) => {
     await SecureStore.setItemAsync(PIN_KEY, nextPin);
     setPin(nextPin);
+    setData((current) => ({ ...current, requirePinOnResume: true }));
     setLocked(false);
   };
 
   const clearPin = async () => {
     await SecureStore.deleteItemAsync(PIN_KEY);
     setPin(null);
+    setData((current) => ({ ...current, requirePinOnResume: false }));
     setLocked(false);
   };
 
@@ -360,6 +431,8 @@ export default function App() {
                   saveTransaction={saveTransaction}
                   saveCategory={saveCategory}
                   deleteCategory={deleteCategory}
+                  deleteTransaction={deleteTransaction}
+                  pinEnabled={Boolean(pin)}
                   exportCsv={exportCsv}
                   importCsv={importCsv}
                   setData={setData}
@@ -373,6 +446,8 @@ export default function App() {
                   {...props}
                   data={data}
                   saveTransaction={saveTransaction}
+                  saveCategory={saveCategory}
+                  deleteCategory={deleteCategory}
                 />
               )}
             </Stack.Screen>
@@ -396,6 +471,24 @@ export default function App() {
                 />
               )}
             </Stack.Screen>
+            <Stack.Screen name="Wallets">
+              {(props) => (
+                <WalletsScreen
+                  {...props}
+                  wallets={data.wallets}
+                  saveWallet={saveWallet}
+                  deleteWallet={deleteWallet}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="SpendingTrend">
+              {(props) => (
+                <SpendingTrendScreen
+                  {...props}
+                  data={data}
+                />
+              )}
+            </Stack.Screen>
             <Stack.Screen name="ChangePin">
               {(props) => (
                 <ChangePinScreen
@@ -408,7 +501,7 @@ export default function App() {
           </Stack.Navigator>
 
           <PinGate
-            visible={locked}
+            visible={locked && data.requirePinOnResume && Boolean(pin)}
             existingPin={pin}
             onUnlock={() => setLocked(false)}
             onSetPin={setOrChangePin}
@@ -425,6 +518,8 @@ function TabsShell({
   saveTransaction,
   saveCategory,
   deleteCategory,
+  deleteTransaction,
+  pinEnabled,
   exportCsv,
   importCsv,
   setData,
@@ -435,6 +530,8 @@ function TabsShell({
   saveTransaction: (payload: Omit<Transaction, "id"> & { id?: string }) => void;
   saveCategory: (payload: Omit<Category, "id"> & { id?: string }) => void;
   deleteCategory: (categoryId: string) => void;
+  deleteTransaction: (transactionId: string) => void;
+  pinEnabled: boolean;
   exportCsv: () => Promise<void>;
   importCsv: () => Promise<void>;
   setData: React.Dispatch<React.SetStateAction<AppData>>;
@@ -481,7 +578,7 @@ function TabsShell({
           ),
         }}
       >
-        {() => <CalendarScreen data={data} categoriesById={categoriesById} />}
+        {() => <CalendarScreen data={data} categoriesById={categoriesById} deleteTransaction={deleteTransaction} />}
       </Tab.Screen>
       <Tab.Screen
         name="Entry"
@@ -497,7 +594,7 @@ function TabsShell({
           ),
         }}
       >
-        {() => <TransactionEntryTab data={data} saveTransaction={saveTransaction} />}
+        {() => <TransactionEntryTab data={data} saveTransaction={saveTransaction} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
       </Tab.Screen>
       <Tab.Screen
         name="Reports"
@@ -526,6 +623,7 @@ function TabsShell({
             importCsv={importCsv}
             setData={setData}
             clearPin={clearPin}
+            pinEnabled={pinEnabled}
           />
         )}
       </Tab.Screen>
@@ -555,33 +653,36 @@ function OverviewScreen({
         </Text>
       </View>
 
-      <GlassCard>
-        <View style={styles.rowBetween}>
-          <Text style={styles.cardTitle}>Chi tiêu 7 ngày gần nhất</Text>
-          <Ionicons name="analytics" size={18} color={COLORS.primary} />
-        </View>
-        <View style={styles.chartRow}>
-          {trend.map((item) => {
-            const ratio = trendMax(trend) === 0 ? 0.1 : item.value / trendMax(trend);
-            return (
-              <View key={item.key} style={styles.chartColumn}>
-                <View style={styles.chartTrack}>
-                  <View
-                    style={[
-                      styles.chartBar,
-                      {
-                        height: Math.max(10, ratio * 108),
-                        backgroundColor: item.value > 0 ? COLORS.primary : "rgba(255,255,255,0.08)",
-                      },
-                    ]}
-                  />
+      <Pressable onPress={() => navigation.navigate("SpendingTrend")}>
+        <GlassCard>
+          <View style={styles.rowBetween}>
+            <Text style={styles.cardTitle}>Chi tiêu 7 ngày gần nhất</Text>
+            <Ionicons name="analytics" size={18} color={COLORS.primary} />
+          </View>
+          <View style={styles.chartRow}>
+            {trend.map((item) => {
+              const ratio = trendMax(trend) === 0 ? 0.1 : item.value / trendMax(trend);
+              return (
+                <View key={item.key} style={styles.chartColumn}>
+                  <Text style={styles.barValue}>{formatCompact(item.value)}</Text>
+                  <View style={styles.chartTrack}>
+                    <View
+                      style={[
+                        styles.chartBar,
+                        {
+                          height: Math.max(10, ratio * 96),
+                          backgroundColor: item.value > 0 ? COLORS.primary : "rgba(255,255,255,0.08)",
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.chartLabel}>{item.label}</Text>
                 </View>
-                <Text style={styles.chartLabel}>{item.label}</Text>
-              </View>
-            );
-          })}
-        </View>
-      </GlassCard>
+              );
+            })}
+          </View>
+        </GlassCard>
+      </Pressable>
 
       <View style={styles.statsGrid}>
         <MetricCard label="Thu nhập tháng" value={formatCurrency(sumByType(monthTransactions, "income"))} accent={COLORS.income} icon="arrow-down" />
@@ -606,7 +707,7 @@ function OverviewScreen({
             <View style={styles.transactionTextBlock}>
               <Text style={styles.transactionTitle}>{categoriesById[item.categoryId]?.name ?? "Danh mục"}</Text>
               <Text style={styles.transactionMeta}>
-                {item.note || "Không có ghi chú"} · {formatDate(item.date)}
+                {item.note || "Không có ghi chú"} · {formatDateTime(item.date)}
               </Text>
             </View>
             <Text style={[styles.transactionAmount, item.type === "income" ? styles.amountIncome : styles.amountExpense]}>
@@ -622,9 +723,11 @@ function OverviewScreen({
 function CalendarScreen({
   data,
   categoriesById,
+  deleteTransaction,
 }: {
   data: AppData;
   categoriesById: Record<string, Category>;
+  deleteTransaction: (transactionId: string) => void;
 }) {
   const navigation = useNavigation<any>();
   const [selectedDate, setSelectedDate] = useState(startOfDay(TODAY));
@@ -686,12 +789,23 @@ function CalendarScreen({
             <Pressable
               key={item.id}
               style={styles.transactionRow}
-              onPress={() => navigation.navigate("TransactionEditor", { transactionId: item.id })}
+              onPress={() => navigation.navigate("TransactionDetail", { transactionId: item.id })}
+              onLongPress={() =>
+                Alert.alert("Giao dịch", "Chọn thao tác", [
+                  { text: "Sửa", onPress: () => navigation.navigate("TransactionEditor", { transactionId: item.id }) },
+                  {
+                    text: "Xóa",
+                    style: "destructive",
+                    onPress: () => deleteTransaction(item.id),
+                  },
+                  { text: "Hủy", style: "cancel" },
+                ])
+              }
             >
               <CategoryIcon category={categoriesById[item.categoryId]} />
               <View style={styles.transactionTextBlock}>
                 <Text style={styles.transactionTitle}>{categoriesById[item.categoryId]?.name ?? "Danh mục"}</Text>
-                <Text style={styles.transactionMeta}>{item.note || item.account}</Text>
+                <Text style={styles.transactionMeta}>{item.note || getWalletName(data.wallets, item.account)} · {formatDateTime(item.date)}</Text>
               </View>
               <Text style={[styles.transactionAmount, item.type === "income" ? styles.amountIncome : styles.amountExpense]}>
                 {item.type === "income" ? "+" : "-"}{formatCompact(item.amount)}
@@ -707,15 +821,21 @@ function CalendarScreen({
 function TransactionEntryTab({
   data,
   saveTransaction,
+  saveCategory,
+  deleteCategory,
 }: {
   data: AppData;
   saveTransaction: (payload: Omit<Transaction, "id"> & { id?: string }) => void;
+  saveCategory: (payload: Omit<Category, "id"> & { id?: string }) => void;
+  deleteCategory: (categoryId: string) => void;
 }) {
   return (
     <Screen title="Nhập giao dịch" subtitle="Ghi nhanh thu nhập và chi tiêu" profile={data.profile}>
       <TransactionForm
         data={data}
         saveTransaction={saveTransaction}
+        saveCategory={saveCategory}
+        deleteCategory={deleteCategory}
         onSaved={() => Alert.alert("Đã lưu", "Giao dịch mới đã được thêm.")}
       />
     </Screen>
@@ -742,6 +862,7 @@ function ReportsScreen({
             const max = Math.max(...monthly.map((entry) => entry.total), 1);
             return (
               <View key={item.label} style={styles.monthBarItem}>
+                <Text style={styles.barValue}>{formatCompact(item.total)}</Text>
                 <View style={styles.monthBarTrack}>
                   <View
                     style={[
@@ -785,6 +906,7 @@ function MoreScreen({
   exportCsv,
   importCsv,
   setData,
+  pinEnabled,
 }: {
   data: AppData;
   saveCategory: (payload: Omit<Category, "id"> & { id?: string }) => void;
@@ -793,6 +915,7 @@ function MoreScreen({
   importCsv: () => Promise<void>;
   setData: React.Dispatch<React.SetStateAction<AppData>>;
   clearPin: () => Promise<void>;
+  pinEnabled: boolean;
 }) {
   const navigation = useNavigation<any>();
   const [premiumCode, setPremiumCode] = useState("");
@@ -844,12 +967,23 @@ function MoreScreen({
 
       <GlassCard>
         <SettingsRow label="Quản lý danh mục" icon="grid" onPress={() => navigation.navigate("Categories")} />
+        <SettingsRow label="Quản lý ví" icon="wallet" onPress={() => navigation.navigate("Wallets")} />
         <SettingsRow label="Đổi mã PIN 4 số" icon="lock-closed" onPress={() => navigation.navigate("ChangePin")} />
         <SettingsToggle
-          label="Khóa lại khi quay vào app"
+          label="Bật khóa PIN"
           icon="shield-checkmark"
           value={data.requirePinOnResume}
-          onValueChange={(value) => setData((current) => ({ ...current, requirePinOnResume: value }))}
+          onValueChange={(value) => {
+            if (value && !pinEnabled) {
+              Alert.alert("Chưa có mã PIN", "Tạo mã PIN 4 số trước khi bật khóa.", [
+                { text: "Hủy", style: "cancel" },
+                { text: "Tạo PIN", onPress: () => navigation.navigate("ChangePin") },
+              ]);
+              return;
+            }
+            animateNext();
+            setData((current) => ({ ...current, requirePinOnResume: value }));
+          }}
         />
       </GlassCard>
 
@@ -866,15 +1000,21 @@ function TransactionEditorScreen({
   navigation,
   data,
   saveTransaction,
+  saveCategory,
+  deleteCategory,
 }: NativeStackScreenProps<RootStackParamList, "TransactionEditor"> & {
   data: AppData;
   saveTransaction: (payload: Omit<Transaction, "id"> & { id?: string }) => void;
+  saveCategory: (payload: Omit<Category, "id"> & { id?: string }) => void;
+  deleteCategory: (categoryId: string) => void;
 }) {
   return (
     <Screen title={route.params?.transactionId ? "Chỉnh sửa giao dịch" : "Thêm giao dịch"} subtitle="Nhập thông tin giao dịch" profile={data.profile}>
       <TransactionForm
         data={data}
         saveTransaction={saveTransaction}
+        saveCategory={saveCategory}
+        deleteCategory={deleteCategory}
         transactionId={route.params?.transactionId}
         defaultType={route.params?.defaultType}
         onSaved={() => navigation.goBack()}
@@ -909,7 +1049,7 @@ function TransactionDetailScreen({
   const category = categoriesById[transaction.categoryId];
 
   return (
-    <Screen title="Chi tiết giao dịch" subtitle={formatDate(transaction.date)} profile={data.profile}>
+    <Screen title="Chi tiết giao dịch" subtitle={formatDateTime(transaction.date)} profile={data.profile}>
       <GlassCard>
         <View style={styles.detailHero}>
           <CategoryIcon category={category} large />
@@ -920,10 +1060,23 @@ function TransactionDetailScreen({
         </View>
 
         <DetailRow label="Loại giao dịch" value={transaction.type === "income" ? "Thu nhập" : "Chi tiêu"} />
-        <DetailRow label="Tài khoản" value={transaction.account} />
+        <DetailRow label="Ví" value={getWalletName(data.wallets, transaction.account)} />
         <DetailRow label="Ghi chú" value={transaction.note || "Không có"} />
         <DetailRow label="Ảnh hóa đơn" value={`${transaction.images.length} ảnh`} />
       </GlassCard>
+
+      {transaction.images.length > 0 && (
+        <GlassCard>
+          <Text style={styles.cardTitle}>Ảnh hóa đơn</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.receiptRow}>
+              {transaction.images.map((uri) => (
+                <Image key={uri} source={{ uri }} style={styles.receiptImage} />
+              ))}
+            </View>
+          </ScrollView>
+        </GlassCard>
+      )}
 
       <View style={styles.actionRow}>
         <Pressable
@@ -954,6 +1107,140 @@ function TransactionDetailScreen({
           <Text style={styles.primaryActionText}>Chỉnh sửa</Text>
         </Pressable>
       </View>
+    </Screen>
+  );
+}
+
+function WalletsScreen({
+  navigation,
+  wallets,
+  saveWallet,
+  deleteWallet,
+}: NativeStackScreenProps<RootStackParamList, "Wallets"> & {
+  wallets: Wallet[];
+  saveWallet: (payload: Omit<Wallet, "id"> & { id?: string }) => void;
+  deleteWallet: (walletId: string) => void;
+}) {
+  const [editing, setEditing] = useState<Wallet | null>(null);
+  const [name, setName] = useState("");
+  const [balance, setBalance] = useState("");
+
+  const beginEdit = (wallet?: Wallet) => {
+    setEditing(wallet ?? null);
+    setName(wallet?.name ?? "");
+    setBalance(wallet ? String(wallet.balance) : "");
+  };
+
+  return (
+    <Screen title="Quản lý ví" subtitle="Theo dõi tiền mặt và các ví khác" profile={{ name: "", initials: "" }}>
+      <GlassCard>
+        <Text style={styles.cardTitle}>{editing ? "Sửa ví" : "Thêm ví"}</Text>
+        <TextInput
+          editable={!editing?.lockedName}
+          value={editing?.lockedName ? editing.name : name}
+          onChangeText={setName}
+          placeholder="Tên ví"
+          placeholderTextColor={COLORS.muted}
+          style={[styles.input, editing?.lockedName && styles.inputDisabled]}
+        />
+        <TextInput
+          value={formatInputAmount(balance)}
+          onChangeText={(text) => setBalance(text.replace(/[^\d]/g, ""))}
+          keyboardType="number-pad"
+          placeholder="0đ"
+          placeholderTextColor={COLORS.muted}
+          style={styles.input}
+        />
+        <Pressable
+          style={styles.primaryAction}
+          onPress={() => {
+            const parsed = Number(balance);
+            const nextName = editing?.lockedName ? editing.name : name.trim();
+            if (!nextName) {
+              Alert.alert("Thiếu tên ví", "Vui lòng nhập tên ví.");
+              return;
+            }
+            saveWallet({
+              id: editing?.id,
+              name: nextName,
+              balance: Number.isNaN(parsed) ? 0 : parsed,
+              lockedName: editing?.lockedName,
+            });
+            beginEdit();
+          }}
+        >
+          <Text style={styles.primaryActionText}>{editing ? "Lưu ví" : "Thêm ví"}</Text>
+        </Pressable>
+      </GlassCard>
+
+      <GlassCard>
+        <Text style={styles.cardTitle}>Danh sách ví</Text>
+        {wallets.map((wallet) => (
+          <Pressable key={wallet.id} style={styles.walletRow} onPress={() => beginEdit(wallet)}>
+            <View>
+              <Text style={styles.transactionTitle}>{wallet.name}</Text>
+              <Text style={styles.transactionMeta}>{wallet.lockedName ? "Ví mặc định" : "Ví tùy chỉnh"}</Text>
+            </View>
+            <View style={styles.walletRight}>
+              <Text style={styles.transactionAmount}>{formatCurrency(wallet.balance)}</Text>
+              {!wallet.lockedName && (
+                <Pressable onPress={() => deleteWallet(wallet.id)}>
+                  <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+                </Pressable>
+              )}
+            </View>
+          </Pressable>
+        ))}
+      </GlassCard>
+
+      <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
+        <Text style={styles.secondaryActionText}>Quay lại</Text>
+      </Pressable>
+    </Screen>
+  );
+}
+
+function SpendingTrendScreen({
+  navigation,
+  data,
+}: NativeStackScreenProps<RootStackParamList, "SpendingTrend"> & {
+  data: AppData;
+}) {
+  const days = buildDailyTrend(data.transactions, 30);
+  const last7 = days.slice(-7).reduce((sum, item) => sum + item.value, 0);
+  const previous7 = days.slice(-14, -7).reduce((sum, item) => sum + item.value, 0);
+  const percent = previous7 === 0 ? (last7 > 0 ? 100 : 0) : ((last7 - previous7) / previous7) * 100;
+  const max = Math.max(...days.map((item) => item.value), 1);
+
+  return (
+    <Screen title="Chi tiêu 30 ngày" subtitle={`Tuần này ${percent >= 0 ? "tăng" : "giảm"} ${Math.abs(percent).toFixed(1)}%`} profile={{ name: "", initials: "" }}>
+      <GlassCard>
+        <Text style={styles.cardTitle}>30 ngày vừa rồi</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.trend30Row}>
+            {days.map((item) => (
+              <View key={item.key} style={styles.trend30Item}>
+                <Text style={styles.barValue}>{formatCompact(item.value)}</Text>
+                <View style={styles.trend30Track}>
+                  <View style={[styles.trend30Bar, { height: Math.max(8, (item.value / max) * 120) }]} />
+                </View>
+                <Text style={styles.chartLabel}>{new Date(item.key).getDate()}</Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </GlassCard>
+
+      <GlassCard>
+        <Text style={styles.cardTitle}>Nhận xét</Text>
+        <Text style={styles.emptyText}>
+          7 ngày gần nhất chi {formatCurrency(last7)}, tuần trước chi {formatCurrency(previous7)}.
+        </Text>
+      </GlassCard>
+
+      <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
+        <Text style={styles.secondaryActionText}>Quay lại</Text>
+      </Pressable>
     </Screen>
   );
 }
@@ -1105,12 +1392,16 @@ function ChangePinScreen({
 function TransactionForm({
   data,
   saveTransaction,
+  saveCategory,
+  deleteCategory,
   transactionId,
   defaultType,
   onSaved,
 }: {
   data: AppData;
   saveTransaction: (payload: Omit<Transaction, "id"> & { id?: string }) => void;
+  saveCategory: (payload: Omit<Category, "id"> & { id?: string }) => void;
+  deleteCategory: (categoryId: string) => void;
   transactionId?: string;
   defaultType?: TransactionType;
   onSaved: () => void;
@@ -1122,9 +1413,12 @@ function TransactionForm({
     existing?.categoryId ?? data.categories.find((item) => item.type === (existing?.type ?? defaultType ?? "expense"))?.id ?? data.categories[0]?.id
   );
   const [note, setNote] = useState(existing?.note ?? "");
-  const [account, setAccount] = useState(existing?.account ?? ACCOUNTS[0]);
+  const [account, setAccount] = useState(resolveWalletId(data.wallets, existing?.account) ?? data.wallets[0]?.id ?? "cash");
   const [date, setDate] = useState(existing ? isoDate(new Date(existing.date)) : isoDate(TODAY));
   const [images, setImages] = useState<string[]>(existing?.images ?? []);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState("");
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
   const categories = data.categories.filter((item) => item.type === type);
 
@@ -1163,17 +1457,29 @@ function TransactionForm({
       <GlassCard>
         <Text style={styles.label}>Số tiền</Text>
         <TextInput
-          value={amount}
+          value={formatInputAmount(amount)}
           onChangeText={(text) => setAmount(text.replace(/[^\d]/g, ""))}
           keyboardType="number-pad"
-          placeholder="0"
+          placeholder="0đ"
           placeholderTextColor={COLORS.muted}
           style={styles.amountInput}
         />
       </GlassCard>
 
       <GlassCard>
-        <Text style={styles.label}>Danh mục</Text>
+        <View style={styles.rowBetween}>
+          <Text style={styles.label}>Danh mục</Text>
+          <Pressable
+            style={styles.inlineIconButton}
+            onPress={() => {
+              setEditingCategory(null);
+              setCategoryDraft("");
+              setCategoryModalOpen(true);
+            }}
+          >
+            <Ionicons name="add" size={18} color={COLORS.primary} />
+          </Pressable>
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.categoryChoices}>
             {categories.map((item) => (
@@ -1181,6 +1487,11 @@ function TransactionForm({
                 key={item.id}
                 style={[styles.categoryChoice, categoryId === item.id && styles.categoryChoiceActive]}
                 onPress={() => setCategoryId(item.id)}
+                onLongPress={() => {
+                  setEditingCategory(item);
+                  setCategoryDraft(item.name);
+                  setCategoryModalOpen(true);
+                }}
               >
                 <CategoryIcon category={item} compact active={categoryId === item.id} />
                 <Text style={[styles.categoryChoiceText, categoryId === item.id && styles.categoryChoiceTextActive]}>
@@ -1211,15 +1522,17 @@ function TransactionForm({
           style={styles.input}
         />
 
-        <Text style={styles.label}>Tài khoản</Text>
+        <Text style={styles.label}>Ví</Text>
         <View style={styles.accountRow}>
-          {ACCOUNTS.map((item) => (
+          {data.wallets.map((item) => (
             <Pressable
-              key={item}
-              style={[styles.accountChip, account === item && styles.accountChipActive]}
-              onPress={() => setAccount(item)}
+              key={item.id}
+              style={[styles.accountChip, account === item.id && styles.accountChipActive]}
+              onPress={() => setAccount(item.id)}
             >
-              <Text style={[styles.accountChipText, account === item && styles.accountChipTextActive]}>{item}</Text>
+              <Text style={[styles.accountChipText, account === item.id && styles.accountChipTextActive]}>
+                {item.name} · {formatCompact(item.balance)}
+              </Text>
             </Pressable>
           ))}
         </View>
@@ -1250,7 +1563,7 @@ function TransactionForm({
             categoryId,
             note: note.trim(),
             account,
-            date: new Date(date).toISOString(),
+            date: existing ? mergeDateWithTime(date, existing.date) : new Date(`${date}T${timeNow()}`).toISOString(),
             images,
           });
           onSaved();
@@ -1259,6 +1572,57 @@ function TransactionForm({
         <Ionicons name="checkmark" size={18} color="#07162F" />
         <Text style={styles.primaryActionText}>{existing ? "Cập nhật giao dịch" : "Lưu giao dịch"}</Text>
       </Pressable>
+
+      <Modal visible={categoryModalOpen} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.cardTitle}>{editingCategory ? "Sửa danh mục" : "Thêm danh mục"}</Text>
+            <TextInput
+              value={categoryDraft}
+              onChangeText={setCategoryDraft}
+              placeholder="Tên danh mục"
+              placeholderTextColor={COLORS.muted}
+              style={styles.input}
+            />
+            <Pressable
+              style={styles.primaryAction}
+              onPress={() => {
+                if (!categoryDraft.trim()) {
+                  return;
+                }
+                saveCategory({
+                  id: editingCategory?.id,
+                  name: categoryDraft.trim(),
+                  type,
+                  icon: editingCategory?.icon ?? (type === "income" ? "cash" : "ellipsis-horizontal-circle"),
+                  color: editingCategory?.color ?? (type === "income" ? COLORS.income : COLORS.expense),
+                });
+                setCategoryModalOpen(false);
+                setCategoryDraft("");
+                setEditingCategory(null);
+              }}
+            >
+              <Text style={styles.primaryActionText}>{editingCategory ? "Lưu danh mục" : "Thêm danh mục"}</Text>
+            </Pressable>
+            {editingCategory && (
+              <Pressable
+                style={[styles.secondaryAction, { borderColor: "rgba(255,142,133,0.25)" }]}
+                onPress={() => {
+                  deleteCategory(editingCategory.id);
+                  setCategoryModalOpen(false);
+                  setEditingCategory(null);
+                  setCategoryDraft("");
+                }}
+              >
+                <Text style={[styles.secondaryActionText, { color: COLORS.error }]}>Xóa danh mục</Text>
+              </Pressable>
+            )}
+            <Pressable style={styles.secondaryAction} onPress={() => setCategoryModalOpen(false)}>
+              <Text style={styles.secondaryActionText}>Đóng</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1322,7 +1686,6 @@ function PinGate({
     <Modal visible={visible} animationType="fade" transparent>
       <View style={styles.pinOverlay}>
         <LinearGradient colors={["#101012", "#18181B"]} style={styles.pinCard}>
-          <Avatar initials="NA" size={72} />
           <Text style={styles.pinTitle}>{creating ? "Thiết lập mã PIN" : "Nhập mã PIN"}</Text>
           <Text style={styles.pinSubtitle}>
             {creating
@@ -1392,7 +1755,6 @@ function Screen({
           <Text style={styles.headerSubtitle}>{subtitle}</Text>
           <Text style={styles.headerTitle}>{title}</Text>
         </View>
-        <Avatar initials={profile.initials || "NA"} />
       </View>
       {children}
       <View style={{ height: 16 }} />
@@ -1610,8 +1972,9 @@ function normalizeData(input: Partial<AppData>): AppData {
     profile: input.profile ?? INITIAL_DATA.profile,
     categories: input.categories?.length ? input.categories : INITIAL_DATA.categories,
     transactions: sortTransactions(input.transactions?.length ? input.transactions : INITIAL_DATA.transactions),
+    wallets: input.wallets?.length ? input.wallets : INITIAL_DATA.wallets,
     currency: input.currency ?? "VND",
-    requirePinOnResume: input.requirePinOnResume ?? true,
+    requirePinOnResume: input.requirePinOnResume ?? false,
     isPremium: input.isPremium ?? false,
   };
 }
@@ -1651,12 +2014,72 @@ function formatCompact(value: number) {
   }).format(value);
 }
 
+function formatInputAmount(value: string) {
+  const digits = value.replace(/[^\d]/g, "");
+  if (!digits) {
+    return "";
+  }
+
+  return `${new Intl.NumberFormat("vi-VN").format(Number(digits))}đ`;
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("vi-VN", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function timeNow() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:00`;
+}
+
+function mergeDateWithTime(date: string, currentDateTime: string) {
+  const current = new Date(currentDateTime);
+  return new Date(
+    `${date}T${String(current.getHours()).padStart(2, "0")}:${String(current.getMinutes()).padStart(2, "0")}:00`
+  ).toISOString();
+}
+
+function resolveWalletId(wallets: Wallet[], account?: string) {
+  if (!account) {
+    return wallets[0]?.id;
+  }
+
+  return wallets.find((wallet) => wallet.id === account || wallet.name === account)?.id ?? wallets[0]?.id;
+}
+
+function getWalletName(wallets: Wallet[], account: string) {
+  return wallets.find((wallet) => wallet.id === account || wallet.name === account)?.name ?? account;
+}
+
+function transactionWalletDelta(transaction: Transaction) {
+  return transaction.type === "income" ? transaction.amount : -transaction.amount;
+}
+
+function applyWalletChanges(wallets: Wallet[], previous?: Transaction, next?: Transaction) {
+  return wallets.map((wallet) => {
+    let balance = wallet.balance;
+    if (previous && resolveWalletId(wallets, previous.account) === wallet.id) {
+      balance -= transactionWalletDelta(previous);
+    }
+    if (next && resolveWalletId(wallets, next.account) === wallet.id) {
+      balance += transactionWalletDelta(next);
+    }
+    return { ...wallet, balance };
+  });
 }
 
 function offsetDate(days: number) {
@@ -1669,10 +2092,10 @@ function sameMonth(a: Date, b: Date) {
   return a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
 }
 
-function buildDailyTrend(transactions: Transaction[]) {
-  return Array.from({ length: 7 }, (_, index) => {
+function buildDailyTrend(transactions: Transaction[], length = 7) {
+  return Array.from({ length }, (_, index) => {
     const date = new Date();
-    date.setDate(date.getDate() - (6 - index));
+    date.setDate(date.getDate() - (length - 1 - index));
     const key = isoDate(date);
     const value = transactions
       .filter((item) => item.type === "expense" && isoDate(new Date(item.date)) === key)
@@ -1819,7 +2242,7 @@ function fromCsv(content: string, currentCategories: Category[]) {
         categoryId: category.id,
         note: record.note || "",
         date: record.date || new Date().toISOString(),
-        account: record.account || ACCOUNTS[0],
+        account: record.account || DEFAULT_WALLETS[0].id,
         images: record.images ? record.images.split("|").filter(Boolean) : [],
       } satisfies Transaction,
     ];
@@ -2001,7 +2424,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    gap: 8,
+    gap: 6,
     marginTop: 4,
   },
   chartColumn: {
@@ -2009,8 +2432,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   chartTrack: {
-    height: 108,
-    width: 22,
+    height: 96,
+    width: 20,
     borderRadius: 14,
     backgroundColor: "rgba(255,255,255,0.05)",
     justifyContent: "flex-end",
@@ -2024,6 +2447,12 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 11,
     marginTop: 8,
+  },
+  barValue: {
+    color: COLORS.muted,
+    fontSize: 10,
+    fontWeight: "600",
+    marginBottom: 4,
   },
   statsGrid: {
     flexDirection: "row",
@@ -2079,39 +2508,39 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     bottom: 16,
-    borderRadius: 34,
+    borderRadius: 30,
     backgroundColor: "rgba(31,31,33,0.94)",
     borderTopWidth: 0,
     elevation: 0,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingTop: 8,
+    paddingTop: 6,
   },
   tabIconWrap: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
-    minWidth: 64,
-    paddingVertical: 4,
-    borderRadius: 16,
+    gap: 1,
+    width: 58,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
   tabIconWrapActive: {
     backgroundColor: "rgba(173,198,255,0.10)",
   },
   tabLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
   },
   entryTab: {
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    minWidth: 84,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 18,
+    width: 72,
   },
   entryTabLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
     color: COLORS.text,
   },
@@ -2129,13 +2558,13 @@ const styles = StyleSheet.create({
   calendarGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 4,
     justifyContent: "space-between",
   },
   dayCell: {
-    width: "12.2%",
+    width: "13.4%",
     aspectRatio: 1,
-    borderRadius: 14,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.03)",
@@ -2215,6 +2644,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     paddingVertical: 8,
   },
+  inputDisabled: {
+    opacity: 0.6,
+  },
   input: {
     backgroundColor: COLORS.surface3,
     borderRadius: 16,
@@ -2225,6 +2657,14 @@ const styles = StyleSheet.create({
   categoryChoices: {
     flexDirection: "row",
     gap: 10,
+  },
+  inlineIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(173,198,255,0.12)",
   },
   categoryChoice: {
     alignItems: "center",
@@ -2276,6 +2716,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: COLORS.surface2,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 24,
+    padding: 16,
+    gap: 12,
   },
   primaryAction: {
     flexDirection: "row",
@@ -2340,6 +2797,52 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+  walletRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.05)",
+  },
+  walletRight: {
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  receiptRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  receiptImage: {
+    width: 140,
+    height: 190,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface3,
+  },
+  trend30Row: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    paddingTop: 4,
+  },
+  trend30Item: {
+    width: 38,
+    alignItems: "center",
+  },
+  trend30Track: {
+    width: 18,
+    height: 120,
+    borderRadius: 12,
+    justifyContent: "flex-end",
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  trend30Bar: {
+    width: "100%",
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
   },
   profileCard: {
     flexDirection: "row",
