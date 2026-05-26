@@ -87,6 +87,8 @@ type RootStackParamList = {
   SpendingTrend: undefined;
   YearStats: undefined;
   TodayTransactions: undefined;
+  Search: undefined;
+  CurrencyConverter: undefined;
 };
 
 type TabParamList = {
@@ -166,7 +168,24 @@ const CURRENCY_RATES: Record<string, number> = {
   KRW: 1368,
   CNY: 7.24,
   THB: 36.7,
+  GBP: 0.78,
+  AUD: 1.53,
+  CAD: 1.37,
+  CHF: 0.9,
+  SGD: 1.35,
+  HKD: 7.82,
+  INR: 83.4,
+  IDR: 16240,
+  MYR: 4.71,
+  PHP: 58.2,
+  TWD: 32.4,
+  NZD: 1.66,
+  SEK: 10.54,
+  NOK: 10.68,
+  DKK: 6.86,
 };
+
+const CATEGORY_COLORS = ["#FA9B00", "#FF7A7A", "#8CB6FF", "#C2A4FF", "#6CE2D9", "#7CD992", "#D4AF37"];
 
 const DEFAULT_CATEGORIES: Category[] = [
   { id: "c1", name: "Ăn uống", type: "expense", icon: "restaurant", color: "#FA9B00" },
@@ -554,6 +573,22 @@ export default function App() {
                 />
               )}
             </Stack.Screen>
+            <Stack.Screen name="Search">
+              {(props) => (
+                <SearchScreen
+                  {...props}
+                  data={data}
+                  categoriesById={categoriesById}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="CurrencyConverter">
+              {(props) => (
+                <CurrencyConverterScreen
+                  {...props}
+                />
+              )}
+            </Stack.Screen>
             <Stack.Screen name="ChangePin">
               {(props) => (
                 <ChangePinScreen
@@ -621,6 +656,22 @@ function TabsShell({
       }}
     >
       <Tab.Screen
+        name="Entry"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <LinearGradient
+              colors={focused ? [COLORS.primaryStrong, COLORS.primary] : [COLORS.surface3, COLORS.surface2]}
+              style={styles.entryTab}
+            >
+              <Ionicons name="add" size={22} color={focused ? "#07162F" : COLORS.text} />
+              <Text style={[styles.entryTabLabel, focused && { color: "#07162F" }]}>Nhập vào</Text>
+            </LinearGradient>
+          ),
+        }}
+      >
+        {() => <TransactionEntryTab data={data} saveTransaction={saveTransaction} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
+      </Tab.Screen>
+      <Tab.Screen
         name="Overview"
         options={{
           tabBarIcon: ({ color, focused }) => (
@@ -644,22 +695,6 @@ function TabsShell({
         }}
       >
         {() => <CalendarScreen data={data} categoriesById={categoriesById} deleteTransaction={deleteTransaction} />}
-      </Tab.Screen>
-      <Tab.Screen
-        name="Entry"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <LinearGradient
-              colors={focused ? [COLORS.primaryStrong, COLORS.primary] : [COLORS.surface3, COLORS.surface2]}
-              style={styles.entryTab}
-            >
-              <Ionicons name="add" size={22} color={focused ? "#07162F" : COLORS.text} />
-              <Text style={[styles.entryTabLabel, focused && { color: "#07162F" }]}>Nhập vào</Text>
-            </LinearGradient>
-          ),
-        }}
-      >
-        {() => <TransactionEntryTab data={data} saveTransaction={saveTransaction} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
       </Tab.Screen>
       <Tab.Screen
         name="Reports"
@@ -704,13 +739,9 @@ function OverviewScreen({
   categoriesById: Record<string, Category>;
 }) {
   const navigation = useNavigation<any>();
-  const [searchText, setSearchText] = useState("");
   const totals = getTotals(data.transactions);
   const monthTransactions = data.transactions.filter((item) => sameMonth(new Date(item.date), TODAY));
   const trend = buildDailyTrend(monthTransactions);
-  const searchResults = searchText.trim()
-    ? searchTransactions(data.transactions, data.categories, searchText).slice(0, 6)
-    : [];
   const prediction = predictMonthlyExpense(data.transactions);
 
   return (
@@ -721,6 +752,18 @@ function OverviewScreen({
         <Text style={styles.balanceMeta}>
           Thu {formatCompact(totals.income)} · Chi {formatCompact(totals.expense)}
         </Text>
+      </View>
+
+      <GlassCard>
+        <Text style={styles.cardTitle}>Dự đoán chi tiêu</Text>
+        <Text style={styles.emptyText}>
+          Nếu giữ tốc độ hiện tại, bạn sẽ chi khoảng {formatCurrency(prediction)} trong tháng này.
+        </Text>
+      </GlassCard>
+
+      <View style={styles.statsGrid}>
+        <MetricCard label="Thu nhập tháng" value={formatCurrency(sumByType(monthTransactions, "income"))} accent={COLORS.income} icon="arrow-down" />
+        <MetricCard label="Chi tiêu tháng" value={formatCurrency(sumByType(monthTransactions, "expense"))} accent={COLORS.expense} icon="arrow-up" />
       </View>
 
       <Pressable onPress={() => navigation.navigate("SpendingTrend")}>
@@ -753,38 +796,6 @@ function OverviewScreen({
           </View>
         </GlassCard>
       </Pressable>
-
-      <View style={styles.statsGrid}>
-        <MetricCard label="Thu nhập tháng" value={formatCurrency(sumByType(monthTransactions, "income"))} accent={COLORS.income} icon="arrow-down" />
-        <MetricCard label="Chi tiêu tháng" value={formatCurrency(sumByType(monthTransactions, "expense"))} accent={COLORS.expense} icon="arrow-up" />
-      </View>
-
-      <GlassCard>
-        <Text style={styles.cardTitle}>Smart Search</Text>
-        <TextInput
-          value={searchText}
-          onChangeText={setSearchText}
-          placeholder="ăn, tháng trước, trên 500k..."
-          placeholderTextColor={COLORS.muted}
-          style={styles.input}
-        />
-        {searchResults.map((item) => (
-          <TransactionSwipeRow
-            key={item.id}
-            transaction={item}
-            category={categoriesById[item.categoryId]}
-            onPress={() => navigation.navigate("TransactionDetail", { transactionId: item.id })}
-            onEdit={() => navigation.navigate("TransactionEditor", { transactionId: item.id })}
-          />
-        ))}
-      </GlassCard>
-
-      <GlassCard>
-        <Text style={styles.cardTitle}>Expense Prediction</Text>
-        <Text style={styles.emptyText}>
-          Nếu giữ tốc độ hiện tại, bạn sẽ chi khoảng {formatCurrency(prediction)} tháng này.
-        </Text>
-      </GlassCard>
 
       <GlassCard>
         <View style={styles.rowBetween}>
@@ -965,7 +976,7 @@ function ReportsScreen({
       </Pressable>
 
       <GlassCard>
-        <Text style={styles.cardTitle}>Smart Insight AI</Text>
+        <Text style={styles.cardTitle}>Gợi ý thông minh</Text>
         <Text style={styles.emptyText}>{buildSmartInsight(data.transactions, "month")}</Text>
       </GlassCard>
 
@@ -1060,6 +1071,7 @@ function MoreScreen({
         <SettingsRow label="Quản lý danh mục" icon="grid" onPress={() => navigation.navigate("Categories")} />
         <SettingsRow label="Quản lý ví" icon="wallet" onPress={() => navigation.navigate("Wallets")} />
         <SettingsRow label="Đổi mã PIN 4 số" icon="lock-closed" onPress={() => navigation.navigate("ChangePin")} />
+        <SettingsRow label="Chuyển đổi tiền tệ" icon="swap-horizontal" onPress={() => navigation.navigate("CurrencyConverter")} />
         <SettingsToggle
           label="Bật khóa PIN"
           icon="shield-checkmark"
@@ -1082,8 +1094,6 @@ function MoreScreen({
         <SettingsRow label="Xuất dữ liệu CSV" icon="download" onPress={() => void exportCsv()} />
         <SettingsRow label="Nhập dữ liệu CSV" icon="cloud-upload" onPress={() => void importCsv()} />
       </GlassCard>
-
-      <CurrencyConverterCard />
     </Screen>
   );
 }
@@ -1381,7 +1391,7 @@ function YearStatsScreen({
         </View>
       </GlassCard>
       <GlassCard>
-        <Text style={styles.cardTitle}>Smart Insight AI</Text>
+        <Text style={styles.cardTitle}>Gợi ý thông minh</Text>
         <Text style={styles.emptyText}>{buildSmartInsight(data.transactions.filter((item) => new Date(item.date).getFullYear() === year), "year")}</Text>
       </GlassCard>
       <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
@@ -1428,6 +1438,61 @@ function TodayTransactionsScreen({
   );
 }
 
+function SearchScreen({
+  navigation,
+  data,
+  categoriesById,
+}: NativeStackScreenProps<RootStackParamList, "Search"> & {
+  data: AppData;
+  categoriesById: Record<string, Category>;
+}) {
+  const [searchText, setSearchText] = useState("");
+  const results = searchText.trim()
+    ? searchTransactions(data.transactions, data.categories, searchText).slice(0, 30)
+    : [];
+
+  return (
+    <Screen title="Tìm kiếm" subtitle="Tìm kiếm thông minh" profile={{ name: "", initials: "" }}>
+      <GlassCard>
+        <TextInput
+          autoFocus
+          value={searchText}
+          onChangeText={setSearchText}
+          placeholder="ăn, tháng trước, trên 500k..."
+          placeholderTextColor={COLORS.muted}
+          style={styles.input}
+        />
+        {results.length === 0 ? (
+          <Text style={styles.emptyText}>Nhập từ khóa, mốc thời gian hoặc số tiền để tìm giao dịch.</Text>
+        ) : (
+          results.map((item) => (
+            <TransactionSwipeRow
+              key={item.id}
+              transaction={item}
+              category={categoriesById[item.categoryId]}
+              onPress={() => navigation.navigate("TransactionDetail", { transactionId: item.id })}
+              onEdit={() => navigation.navigate("TransactionEditor", { transactionId: item.id })}
+            />
+          ))
+        )}
+      </GlassCard>
+    </Screen>
+  );
+}
+
+function CurrencyConverterScreen({
+  navigation,
+}: NativeStackScreenProps<RootStackParamList, "CurrencyConverter">) {
+  return (
+    <Screen title="Chuyển đổi tiền tệ" subtitle="Tỉ giá tham khảo theo ngày" profile={{ name: "", initials: "" }}>
+      <CurrencyConverterCard />
+      <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
+        <Text style={styles.secondaryActionText}>Quay lại</Text>
+      </Pressable>
+    </Screen>
+  );
+}
+
 function CategoriesScreen({
   navigation,
   categories,
@@ -1441,7 +1506,7 @@ function CategoriesScreen({
   const [type, setType] = useState<TransactionType>("expense");
   const [name, setName] = useState("");
   const iconOptions = CATEGORY_ICONS;
-  const colorOptions = type === "expense" ? ["#FA9B00", "#FF7A7A", "#8CB6FF", "#C2A4FF"] : ["#79B5FF", "#7CD992", "#D4AF37", "#AEB4C2"];
+  const colorOptions = CATEGORY_COLORS;
   const [icon, setIcon] = useState<string>(iconOptions[0]);
   const [color, setColor] = useState(colorOptions[0]);
 
@@ -1602,6 +1667,7 @@ function TransactionForm({
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState("");
   const [categoryIconDraft, setCategoryIconDraft] = useState<string>(CATEGORY_ICONS[0]);
+  const [categoryColorDraft, setCategoryColorDraft] = useState<string>(CATEGORY_COLORS[0]);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
   const categories = data.categories.filter((item) => item.type === type);
@@ -1641,13 +1707,14 @@ function TransactionForm({
       <GlassCard>
         <Text style={styles.label}>Số tiền</Text>
         <TextInput
-          value={formatInputAmount(amount)}
+          value={amount}
           onChangeText={(text) => setAmount(text.replace(/[^\d]/g, ""))}
           keyboardType="number-pad"
-          placeholder="0đ"
+          placeholder="0"
           placeholderTextColor={COLORS.muted}
           style={styles.amountInput}
         />
+        <Text style={styles.amountPreview}>{formatInputAmount(amount) || "0đ"}</Text>
       </GlassCard>
 
       <GlassCard>
@@ -1659,6 +1726,7 @@ function TransactionForm({
               setEditingCategory(null);
               setCategoryDraft("");
               setCategoryIconDraft(type === "income" ? "cash" : "restaurant");
+              setCategoryColorDraft(type === "income" ? COLORS.income : COLORS.expense);
               setCategoryModalOpen(true);
             }}
           >
@@ -1676,6 +1744,7 @@ function TransactionForm({
                   setEditingCategory(item);
                   setCategoryDraft(item.name);
                   setCategoryIconDraft(item.icon);
+                  setCategoryColorDraft(item.color);
                   setCategoryModalOpen(true);
                 }}
               >
@@ -1783,6 +1852,17 @@ function TransactionForm({
                 ))}
               </View>
             </ScrollView>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.iconGrid}>
+                {CATEGORY_COLORS.map((colorValue) => (
+                  <Pressable
+                    key={colorValue}
+                    style={[styles.colorChoice, { backgroundColor: colorValue }, categoryColorDraft === colorValue && styles.colorChoiceActive]}
+                    onPress={() => setCategoryColorDraft(colorValue)}
+                  />
+                ))}
+              </View>
+            </ScrollView>
             <Pressable
               style={styles.primaryAction}
               onPress={() => {
@@ -1794,7 +1874,7 @@ function TransactionForm({
                   name: categoryDraft.trim(),
                   type,
                   icon: categoryIconDraft,
-                  color: editingCategory?.color ?? (type === "income" ? COLORS.income : COLORS.expense),
+                  color: categoryColorDraft,
                 });
                 setCategoryModalOpen(false);
                 setCategoryDraft("");
@@ -1947,6 +2027,7 @@ function Screen({
   scrollable?: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
   const content = (
     <View style={styles.screenInner}>
       <View style={[styles.screenHeader, { paddingTop: insets.top + 8 }]}>
@@ -1954,6 +2035,9 @@ function Screen({
           <Text style={styles.headerSubtitle}>{subtitle}</Text>
           <Text style={styles.headerTitle}>{title}</Text>
         </View>
+        <Pressable style={styles.headerSearchButton} onPress={() => navigation.navigate("Search")}>
+          <Ionicons name="search" size={20} color={COLORS.text} />
+        </Pressable>
       </View>
       {children}
       <View style={{ height: 16 }} />
@@ -2380,16 +2464,25 @@ function buildSmartInsight(transactions: Transaction[], scope: "week" | "month" 
   const incomeTotal = income.reduce((sum, item) => sum + item.amount, 0);
   const balance = incomeTotal - expenseTotal;
   const label = scope === "week" ? "tuần này" : scope === "month" ? "tháng này" : "năm này";
+  const averageExpense = expenses.length ? expenseTotal / expenses.length : 0;
+  const biggestExpense = expenses.reduce<Transaction | undefined>(
+    (max, item) => (!max || item.amount > max.amount ? item : max),
+    undefined
+  );
 
   if (expenses.length === 0 && income.length === 0) {
     return `Chưa đủ dữ liệu ${label} để nhận xét.`;
   }
 
-  if (balance >= 0) {
-    return `Smart Insight AI: ${label} đang dương ${formatCurrency(balance)}. Tốc độ chi hiện vẫn thấp hơn thu.`;
+  if (balance >= 0 && incomeTotal > 0) {
+    return `Gợi ý thông minh: ${label} đang dương ${formatCurrency(balance)}. Mức chi trung bình mỗi giao dịch là ${formatCurrency(averageExpense)}${biggestExpense ? `, khoản lớn nhất ${formatCurrency(biggestExpense.amount)}` : ""}.`;
   }
 
-  return `Smart Insight AI: ${label} đang âm ${formatCurrency(Math.abs(balance))}. Nên giảm các khoản chi không cố định.`;
+  if (expenseTotal > incomeTotal && incomeTotal > 0) {
+    return `Gợi ý thông minh: ${label} chi vượt thu ${formatCurrency(expenseTotal - incomeTotal)}. Nên giảm nhóm chi linh hoạt trước khi thêm giao dịch mới.`;
+  }
+
+  return `Gợi ý thông minh: ${label} đã chi ${formatCurrency(expenseTotal)}. Theo dõi các khoản trên ${formatCurrency(averageExpense)} để giữ ngân sách ổn định.`;
 }
 
 function formatDate(value: string) {
@@ -2752,6 +2845,16 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
   },
+  headerSearchButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
   avatar: {
     alignItems: "center",
     justifyContent: "center",
@@ -3055,6 +3158,11 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: "700",
     paddingVertical: 8,
+  },
+  amountPreview: {
+    color: COLORS.muted,
+    fontSize: 16,
+    fontWeight: "600",
   },
   inputDisabled: {
     opacity: 0.6,
