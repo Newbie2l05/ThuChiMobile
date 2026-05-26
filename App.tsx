@@ -75,6 +75,7 @@ type AppData = {
   currency: string;
   requirePinOnResume: boolean;
   isPremium: boolean;
+  themeMode: "dark" | "light";
 };
 
 type RootStackParamList = {
@@ -222,6 +223,7 @@ const INITIAL_DATA: AppData = {
   currency: "VND",
   requirePinOnResume: false,
   isPremium: false,
+  themeMode: "dark",
 };
 
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -656,22 +658,6 @@ function TabsShell({
       }}
     >
       <Tab.Screen
-        name="Entry"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <LinearGradient
-              colors={focused ? [COLORS.primaryStrong, COLORS.primary] : [COLORS.surface3, COLORS.surface2]}
-              style={styles.entryTab}
-            >
-              <Ionicons name="add" size={22} color={focused ? "#07162F" : COLORS.text} />
-              <Text style={[styles.entryTabLabel, focused && { color: "#07162F" }]}>Nhập vào</Text>
-            </LinearGradient>
-          ),
-        }}
-      >
-        {() => <TransactionEntryTab data={data} saveTransaction={saveTransaction} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
-      </Tab.Screen>
-      <Tab.Screen
         name="Overview"
         options={{
           tabBarIcon: ({ color, focused }) => (
@@ -695,6 +681,22 @@ function TabsShell({
         }}
       >
         {() => <CalendarScreen data={data} categoriesById={categoriesById} deleteTransaction={deleteTransaction} />}
+      </Tab.Screen>
+      <Tab.Screen
+        name="Entry"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <LinearGradient
+              colors={focused ? [COLORS.primaryStrong, COLORS.primary] : [COLORS.surface3, COLORS.surface2]}
+              style={styles.entryTab}
+            >
+              <Ionicons name="add" size={22} color={focused ? "#07162F" : COLORS.text} />
+              <Text style={[styles.entryTabLabel, focused && { color: "#07162F" }]}>Nhập vào</Text>
+            </LinearGradient>
+          ),
+        }}
+      >
+        {() => <TransactionEntryTab data={data} saveTransaction={saveTransaction} saveCategory={saveCategory} deleteCategory={deleteCategory} />}
       </Tab.Screen>
       <Tab.Screen
         name="Reports"
@@ -756,9 +758,7 @@ function OverviewScreen({
 
       <GlassCard>
         <Text style={styles.cardTitle}>Dự đoán chi tiêu</Text>
-        <Text style={styles.emptyText}>
-          Nếu giữ tốc độ hiện tại, bạn sẽ chi khoảng {formatCurrency(prediction)} trong tháng này.
-        </Text>
+        <Text style={styles.emptyText}>{buildExpensePredictionText(data.transactions, prediction)}</Text>
       </GlassCard>
 
       <View style={styles.statsGrid}>
@@ -1072,6 +1072,15 @@ function MoreScreen({
         <SettingsRow label="Quản lý ví" icon="wallet" onPress={() => navigation.navigate("Wallets")} />
         <SettingsRow label="Đổi mã PIN 4 số" icon="lock-closed" onPress={() => navigation.navigate("ChangePin")} />
         <SettingsRow label="Chuyển đổi tiền tệ" icon="swap-horizontal" onPress={() => navigation.navigate("CurrencyConverter")} />
+        <SettingsToggle
+          label="Chế độ sáng"
+          icon="sunny"
+          value={data.themeMode === "light"}
+          onValueChange={(value) => {
+            animateNext();
+            setData((current) => ({ ...current, themeMode: value ? "light" : "dark" }));
+          }}
+        />
         <SettingsToggle
           label="Bật khóa PIN"
           icon="shield-checkmark"
@@ -2140,6 +2149,7 @@ function CurrencyConverterCard() {
   const [amount, setAmount] = useState("100");
   const [from, setFrom] = useState("USD");
   const [to, setTo] = useState("VND");
+  const [pickerTarget, setPickerTarget] = useState<"from" | "to" | null>(null);
   const converted = convertCurrency(Number(amount) || 0, from, to);
   const codes = Object.keys(CURRENCY_RATES);
 
@@ -2155,35 +2165,61 @@ function CurrencyConverterCard() {
         style={styles.input}
       />
       <View style={styles.currencyRow}>
-        <CurrencyPicker value={from} codes={codes} onChange={setFrom} />
+        <CurrencyPicker value={from} onOpen={() => setPickerTarget("from")} />
         <Ionicons name="arrow-forward" size={18} color={COLORS.muted} />
-        <CurrencyPicker value={to} codes={codes} onChange={setTo} />
+        <CurrencyPicker value={to} onOpen={() => setPickerTarget("to")} />
       </View>
       <Text style={styles.metricValue}>{formatNumber(converted)} {to}</Text>
-      <Text style={styles.transactionMeta}>Tỉ giá tham khảo theo ngày</Text>
+      <Text style={styles.transactionMeta}>Tỉ giá tham khảo theo 1.000 VND</Text>
       <View style={styles.rateGrid}>
-        {codes.filter((code) => code !== "USD").map((code) => (
-          <Text key={code} style={styles.rateText}>1 USD = {formatNumber(CURRENCY_RATES[code])} {code}</Text>
+        {codes.filter((code) => code !== "VND").map((code) => (
+          <Text key={code} style={styles.rateText}>1.000 VND = {formatNumber(convertCurrency(1000, "VND", code))} {code}</Text>
         ))}
       </View>
+      <Modal visible={Boolean(pickerTarget)} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.cardTitle}>Chọn tiền tệ</Text>
+            <ScrollView style={styles.currencyList}>
+              {codes.map((code) => (
+                <Pressable
+                  key={code}
+                  style={styles.currencyOption}
+                  onPress={() => {
+                    if (pickerTarget === "from") {
+                      setFrom(code);
+                    } else {
+                      setTo(code);
+                    }
+                    setPickerTarget(null);
+                  }}
+                >
+                  <Text style={styles.transactionTitle}>{code}</Text>
+                  <Text style={styles.transactionMeta}>1.000 VND = {formatNumber(convertCurrency(1000, "VND", code))} {code}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable style={styles.secondaryAction} onPress={() => setPickerTarget(null)}>
+              <Text style={styles.secondaryActionText}>Đóng</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </GlassCard>
   );
 }
 
 function CurrencyPicker({
   value,
-  codes,
-  onChange,
+  onOpen,
 }: {
   value: string;
-  codes: string[];
-  onChange: (value: string) => void;
+  onOpen: () => void;
 }) {
-  const currentIndex = codes.indexOf(value);
   return (
     <Pressable
       style={styles.accountChip}
-      onPress={() => onChange(codes[(currentIndex + 1) % codes.length])}
+      onPress={onOpen}
     >
       <Text style={styles.accountChipText}>{value}</Text>
     </Pressable>
@@ -2356,6 +2392,7 @@ function normalizeData(input: Partial<AppData>): AppData {
     currency: input.currency ?? "VND",
     requirePinOnResume: input.requirePinOnResume ?? false,
     isPremium: input.isPremium ?? false,
+    themeMode: input.themeMode ?? "dark",
   };
 }
 
@@ -2457,6 +2494,26 @@ function predictMonthlyExpense(transactions: Transaction[]) {
   return spent + averageDaily * (daysInMonth - day);
 }
 
+function buildExpensePredictionText(transactions: Transaction[], predictedTotal: number) {
+  const monthExpenses = transactions.filter(
+    (item) => item.type === "expense" && sameMonth(new Date(item.date), TODAY)
+  );
+  const spent = monthExpenses.reduce((sum, item) => sum + item.amount, 0);
+  const activeDays = new Set(monthExpenses.map((item) => isoDate(new Date(item.date)))).size;
+  const day = TODAY.getDate();
+  const daysInMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0).getDate();
+  const remainingDays = Math.max(daysInMonth - day, 0);
+  const averageDaily = day > 0 ? spent / day : 0;
+  const averageActiveDay = activeDays > 0 ? spent / activeDays : 0;
+  const pace = predictedTotal > spent * 1.25 ? "đang tăng nhanh" : predictedTotal < spent * 1.05 ? "khá ổn định" : "đang tăng nhẹ";
+
+  if (spent === 0) {
+    return "Tháng này chưa có chi tiêu. Khi có dữ liệu, hệ thống sẽ dự đoán theo tốc độ chi mỗi ngày.";
+  }
+
+  return `Nếu giữ tốc độ hiện tại, bạn sẽ chi khoảng ${formatCurrency(predictedTotal)} trong tháng này. Đã chi ${formatCurrency(spent)} qua ${activeDays || 1} ngày có giao dịch; trung bình theo ngày là ${formatCurrency(averageDaily)}, trung bình mỗi ngày phát sinh chi là ${formatCurrency(averageActiveDay)}. Còn ${remainingDays} ngày, nhịp chi ${pace}.`;
+}
+
 function buildSmartInsight(transactions: Transaction[], scope: "week" | "month" | "year") {
   const expenses = transactions.filter((item) => item.type === "expense");
   const income = transactions.filter((item) => item.type === "income");
@@ -2469,20 +2526,26 @@ function buildSmartInsight(transactions: Transaction[], scope: "week" | "month" 
     (max, item) => (!max || item.amount > max.amount ? item : max),
     undefined
   );
+  const transactionCount = expenses.length + income.length;
+  const incomeRatio = incomeTotal === 0 ? 0 : expenseTotal / incomeTotal;
 
   if (expenses.length === 0 && income.length === 0) {
     return `Chưa đủ dữ liệu ${label} để nhận xét.`;
   }
 
+  if (balance >= 0 && incomeTotal > 0 && incomeRatio <= 0.6) {
+    return `Gợi ý thông minh: ${label} đang khỏe, còn dư ${formatCurrency(balance)} sau ${transactionCount} giao dịch. Chi tiêu mới dùng ${(incomeRatio * 100).toFixed(1)}% thu nhập; có thể giữ mức chi trung bình quanh ${formatCurrency(averageExpense)} mỗi giao dịch.`;
+  }
+
   if (balance >= 0 && incomeTotal > 0) {
-    return `Gợi ý thông minh: ${label} đang dương ${formatCurrency(balance)}. Mức chi trung bình mỗi giao dịch là ${formatCurrency(averageExpense)}${biggestExpense ? `, khoản lớn nhất ${formatCurrency(biggestExpense.amount)}` : ""}.`;
+    return `Gợi ý thông minh: ${label} vẫn dương ${formatCurrency(balance)}, nhưng chi đã đạt ${(incomeRatio * 100).toFixed(1)}% thu nhập. Khoản lớn nhất là ${biggestExpense ? formatCurrency(biggestExpense.amount) : "0đ"}; nên kiểm soát các khoản tương tự trong vài ngày tới.`;
   }
 
   if (expenseTotal > incomeTotal && incomeTotal > 0) {
-    return `Gợi ý thông minh: ${label} chi vượt thu ${formatCurrency(expenseTotal - incomeTotal)}. Nên giảm nhóm chi linh hoạt trước khi thêm giao dịch mới.`;
+    return `Gợi ý thông minh: ${label} chi vượt thu ${formatCurrency(expenseTotal - incomeTotal)}. Ưu tiên giảm các khoản không cố định, đặc biệt những giao dịch lớn hơn ${formatCurrency(averageExpense)}.`;
   }
 
-  return `Gợi ý thông minh: ${label} đã chi ${formatCurrency(expenseTotal)}. Theo dõi các khoản trên ${formatCurrency(averageExpense)} để giữ ngân sách ổn định.`;
+  return `Gợi ý thông minh: ${label} đã chi ${formatCurrency(expenseTotal)} với ${expenses.length} giao dịch. Chưa có đủ thu nhập để so sánh, nên tạm đặt ngưỡng cảnh báo ở ${formatCurrency(averageExpense)} mỗi giao dịch.`;
 }
 
 function formatDate(value: string) {
@@ -3397,6 +3460,14 @@ const styles = StyleSheet.create({
   rateText: {
     color: COLORS.muted,
     fontSize: 13,
+  },
+  currencyList: {
+    maxHeight: 360,
+  },
+  currencyOption: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
   },
   profileCard: {
     flexDirection: "row",
