@@ -2,7 +2,7 @@
   "name": "thu-chi-mobile-rn-sdk54",
   "version": "1.0.0",
   "private": true,
-  "main": "index.ts",
+  "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -33,6 +33,7 @@
     "react-native-svg": "15.12.1"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.7",
     "@types/react": "~19.1.10",
     "typescript": "~5.9.2"
   }
