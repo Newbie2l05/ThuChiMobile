@@ -335,6 +335,8 @@ export default function App() {
   const [locked, setLocked] = useState(true);
   const appState = useRef(AppState.currentState);
   const relockOnActive = useRef(false);
+  const styles = cachedStyles[data.themeMode];
+  const COLORS = data.themeMode === 'dark' ? DARK_COLORS : LIGHT_COLORS;
 
   useEffect(() => {
     void (async () => {
@@ -1710,6 +1712,7 @@ function MonthTransactionsScreen({
   data,
   categoriesById,
   deleteTransaction,
+  route,
 }: NativeStackScreenProps<RootStackParamList, "MonthTransactions"> & {
   data: AppData;
   categoriesById: Record<string, Category>;
@@ -3429,7 +3432,7 @@ function fromCsv(content: string, currentCategories: Category[]) {
         name: categoryName,
         type: rawType,
         icon: rawType === "income" ? "cash" : "ellipsis-horizontal-circle",
-        color: rawType === "income" ? COLORS.income : COLORS.expense,
+        color: rawType === "income" ? DARK_COLORS.income : DARK_COLORS.expense,
       };
       categoryMap.set(category.name.toLowerCase(), category);
       importedCategories.push(category);
