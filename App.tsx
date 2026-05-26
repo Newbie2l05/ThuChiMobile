@@ -85,6 +85,8 @@ type RootStackParamList = {
   ChangePin: undefined;
   Wallets: undefined;
   SpendingTrend: undefined;
+  YearStats: undefined;
+  TodayTransactions: undefined;
 };
 
 type TabParamList = {
@@ -119,6 +121,51 @@ const COLORS = {
   error: "#FF8E85",
   success: "#7CD992",
   gold: "#D4AF37",
+};
+
+const CATEGORY_ICONS = [
+  "restaurant",
+  "fast-food",
+  "cafe",
+  "pizza",
+  "beer",
+  "car-sport",
+  "bus",
+  "airplane",
+  "home",
+  "business",
+  "cart",
+  "bag-handle",
+  "gift",
+  "shirt",
+  "game-controller",
+  "film",
+  "fitness",
+  "medical",
+  "school",
+  "book",
+  "phone-portrait",
+  "laptop",
+  "wifi",
+  "paw",
+  "leaf",
+  "hammer",
+  "sparkles",
+  "wallet",
+  "cash",
+  "trophy",
+  "briefcase",
+  "trending-up",
+] as const;
+
+const CURRENCY_RATES: Record<string, number> = {
+  USD: 1,
+  VND: 25450,
+  EUR: 0.92,
+  JPY: 157.2,
+  KRW: 1368,
+  CNY: 7.24,
+  THB: 36.7,
 };
 
 const DEFAULT_CATEGORIES: Category[] = [
@@ -489,6 +536,24 @@ export default function App() {
                 />
               )}
             </Stack.Screen>
+            <Stack.Screen name="YearStats">
+              {(props) => (
+                <YearStatsScreen
+                  {...props}
+                  data={data}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="TodayTransactions">
+              {(props) => (
+                <TodayTransactionsScreen
+                  {...props}
+                  data={data}
+                  categoriesById={categoriesById}
+                  deleteTransaction={deleteTransaction}
+                />
+              )}
+            </Stack.Screen>
             <Stack.Screen name="ChangePin">
               {(props) => (
                 <ChangePinScreen
@@ -639,9 +704,14 @@ function OverviewScreen({
   categoriesById: Record<string, Category>;
 }) {
   const navigation = useNavigation<any>();
+  const [searchText, setSearchText] = useState("");
   const totals = getTotals(data.transactions);
   const monthTransactions = data.transactions.filter((item) => sameMonth(new Date(item.date), TODAY));
   const trend = buildDailyTrend(monthTransactions);
+  const searchResults = searchText.trim()
+    ? searchTransactions(data.transactions, data.categories, searchText).slice(0, 6)
+    : [];
+  const prediction = predictMonthlyExpense(data.transactions);
 
   return (
     <Screen title="Tổng quan hôm nay" subtitle="Sổ Thu Chi" profile={data.profile}>
@@ -690,30 +760,50 @@ function OverviewScreen({
       </View>
 
       <GlassCard>
+        <Text style={styles.cardTitle}>Smart Search</Text>
+        <TextInput
+          value={searchText}
+          onChangeText={setSearchText}
+          placeholder="ăn, tháng trước, trên 500k..."
+          placeholderTextColor={COLORS.muted}
+          style={styles.input}
+        />
+        {searchResults.map((item) => (
+          <TransactionSwipeRow
+            key={item.id}
+            transaction={item}
+            category={categoriesById[item.categoryId]}
+            onPress={() => navigation.navigate("TransactionDetail", { transactionId: item.id })}
+            onEdit={() => navigation.navigate("TransactionEditor", { transactionId: item.id })}
+          />
+        ))}
+      </GlassCard>
+
+      <GlassCard>
+        <Text style={styles.cardTitle}>Expense Prediction</Text>
+        <Text style={styles.emptyText}>
+          Nếu giữ tốc độ hiện tại, bạn sẽ chi khoảng {formatCurrency(prediction)} tháng này.
+        </Text>
+      </GlassCard>
+
+      <GlassCard>
         <View style={styles.rowBetween}>
-          <Text style={styles.cardTitle}>Giao dịch gần đây</Text>
-          <Pressable onPress={() => navigation.navigate("Calendar")}>
-            <Text style={styles.linkText}>Xem tất cả</Text>
+          <Pressable onPress={() => navigation.navigate("TodayTransactions")}>
+            <Text style={styles.cardTitle}>Giao dịch gần đây</Text>
+          </Pressable>
+          <Pressable onPress={() => navigation.navigate("TodayTransactions")}>
+            <Text style={styles.linkText}>Hôm nay</Text>
           </Pressable>
         </View>
 
         {data.transactions.slice(0, 5).map((item) => (
-          <Pressable
+          <TransactionSwipeRow
             key={item.id}
-            style={styles.transactionRow}
+            transaction={item}
+            category={categoriesById[item.categoryId]}
             onPress={() => navigation.navigate("TransactionDetail", { transactionId: item.id })}
-          >
-            <CategoryIcon category={categoriesById[item.categoryId]} />
-            <View style={styles.transactionTextBlock}>
-              <Text style={styles.transactionTitle}>{categoriesById[item.categoryId]?.name ?? "Danh mục"}</Text>
-              <Text style={styles.transactionMeta}>
-                {item.note || "Không có ghi chú"} · {formatDateTime(item.date)}
-              </Text>
-            </View>
-            <Text style={[styles.transactionAmount, item.type === "income" ? styles.amountIncome : styles.amountExpense]}>
-              {item.type === "income" ? "+" : "-"}{formatCompact(item.amount)}
-            </Text>
-          </Pressable>
+            onEdit={() => navigation.navigate("TransactionEditor", { transactionId: item.id })}
+          />
         ))}
       </GlassCard>
     </Screen>
@@ -759,20 +849,19 @@ function CalendarScreen({
 
         <View style={styles.calendarGrid}>
           {days.map((day) => {
-            const active = day.inMonth && isoDate(day.date) === selectedKey;
+            const active = isoDate(day.date) === selectedKey;
             return (
               <Pressable
-                key={`${day.date.toISOString()}_${day.inMonth}`}
-                style={[styles.dayCell, !day.inMonth && styles.dayCellOutside, active && styles.dayCellActive]}
-                disabled={!day.inMonth}
+                key={day.date.toISOString()}
+                style={[styles.dayCell, active && styles.dayCellActive]}
                 onPress={() => setSelectedDate(day.date)}
               >
-                <Text style={[styles.dayLabel, !day.inMonth && styles.dayLabelMuted, active && styles.dayLabelActive]}>
-                  {day.inMonth ? day.date.getDate() : ""}
+                <Text style={[styles.dayLabel, active && styles.dayLabelActive]}>
+                  {day.date.getDate()}
                 </Text>
                 <View style={styles.dayDots}>
-                  {day.inMonth && day.income > 0 && <View style={[styles.dayDot, { backgroundColor: COLORS.income }]} />}
-                  {day.inMonth && day.expense > 0 && <View style={[styles.dayDot, { backgroundColor: COLORS.expense }]} />}
+                  {day.income > 0 && <View style={[styles.dayDot, { backgroundColor: COLORS.income }]} />}
+                  {day.expense > 0 && <View style={[styles.dayDot, { backgroundColor: COLORS.expense }]} />}
                 </View>
               </Pressable>
             );
@@ -786,10 +875,13 @@ function CalendarScreen({
           <Text style={styles.emptyText}>Chưa có giao dịch trong ngày này.</Text>
         ) : (
           items.map((item) => (
-            <Pressable
+            <TransactionSwipeRow
               key={item.id}
-              style={styles.transactionRow}
+              transaction={item}
+              category={categoriesById[item.categoryId]}
               onPress={() => navigation.navigate("TransactionDetail", { transactionId: item.id })}
+              onEdit={() => navigation.navigate("TransactionEditor", { transactionId: item.id })}
+              onDelete={() => deleteTransaction(item.id)}
               onLongPress={() =>
                 Alert.alert("Giao dịch", "Chọn thao tác", [
                   { text: "Sửa", onPress: () => navigation.navigate("TransactionEditor", { transactionId: item.id }) },
@@ -801,16 +893,7 @@ function CalendarScreen({
                   { text: "Hủy", style: "cancel" },
                 ])
               }
-            >
-              <CategoryIcon category={categoriesById[item.categoryId]} />
-              <View style={styles.transactionTextBlock}>
-                <Text style={styles.transactionTitle}>{categoriesById[item.categoryId]?.name ?? "Danh mục"}</Text>
-                <Text style={styles.transactionMeta}>{item.note || getWalletName(data.wallets, item.account)} · {formatDateTime(item.date)}</Text>
-              </View>
-              <Text style={[styles.transactionAmount, item.type === "income" ? styles.amountIncome : styles.amountExpense]}>
-                {item.type === "income" ? "+" : "-"}{formatCompact(item.amount)}
-              </Text>
-            </Pressable>
+            />
           ))
         )}
       </GlassCard>
@@ -849,33 +932,41 @@ function ReportsScreen({
   data: AppData;
   categoriesById: Record<string, Category>;
 }) {
+  const navigation = useNavigation<any>();
   const monthly = monthBuckets(data.transactions);
   const categorySummary = summarizeCategories(data.transactions, data.categories);
   const currentExpense = categorySummary.filter((item) => item.type === "expense").slice(0, 5);
 
   return (
     <Screen title="Báo cáo" subtitle="Theo dõi xu hướng chi tiêu và thu nhập" profile={data.profile}>
-      <GlassCard>
-        <Text style={styles.cardTitle}>6 tháng gần nhất</Text>
-        <View style={styles.monthBars}>
-          {monthly.map((item) => {
-            const max = Math.max(...monthly.map((entry) => entry.total), 1);
-            return (
-              <View key={item.label} style={styles.monthBarItem}>
-                <Text style={styles.barValue}>{formatCompact(item.total)}</Text>
-                <View style={styles.monthBarTrack}>
-                  <View
-                    style={[
-                      styles.monthBar,
-                      { height: Math.max(14, (item.total / max) * 120) },
-                    ]}
-                  />
+      <Pressable onPress={() => navigation.navigate("YearStats")}>
+        <GlassCard>
+          <Text style={styles.cardTitle}>6 tháng gần nhất</Text>
+          <View style={styles.monthBars}>
+            {monthly.map((item) => {
+              const max = Math.max(...monthly.map((entry) => entry.total), 1);
+              return (
+                <View key={item.label} style={styles.monthBarItem}>
+                  <Text style={styles.barValue}>{formatCompact(item.total)}</Text>
+                  <View style={styles.monthBarTrack}>
+                    <View
+                      style={[
+                        styles.monthBar,
+                        { height: Math.max(14, (item.total / max) * 120) },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.chartLabel}>{item.label}</Text>
                 </View>
-                <Text style={styles.chartLabel}>{item.label}</Text>
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        </GlassCard>
+      </Pressable>
+
+      <GlassCard>
+        <Text style={styles.cardTitle}>Smart Insight AI</Text>
+        <Text style={styles.emptyText}>{buildSmartInsight(data.transactions, "month")}</Text>
       </GlassCard>
 
       <GlassCard>
@@ -991,6 +1082,8 @@ function MoreScreen({
         <SettingsRow label="Xuất dữ liệu CSV" icon="download" onPress={() => void exportCsv()} />
         <SettingsRow label="Nhập dữ liệu CSV" icon="cloud-upload" onPress={() => void importCsv()} />
       </GlassCard>
+
+      <CurrencyConverterCard />
     </Screen>
   );
 }
@@ -1035,6 +1128,7 @@ function TransactionDetailScreen({
   deleteTransaction: (transactionId: string) => void;
 }) {
   const transaction = data.transactions.find((item) => item.id === route.params.transactionId);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   if (!transaction) {
     return (
@@ -1071,12 +1165,23 @@ function TransactionDetailScreen({
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.receiptRow}>
               {transaction.images.map((uri) => (
-                <Image key={uri} source={{ uri }} style={styles.receiptImage} />
+                <Pressable key={uri} onPress={() => setPreviewImage(uri)}>
+                  <Image source={{ uri }} style={styles.receiptImage} />
+                </Pressable>
               ))}
             </View>
           </ScrollView>
         </GlassCard>
       )}
+
+      <Modal visible={Boolean(previewImage)} transparent animationType="fade">
+        <View style={styles.imagePreviewOverlay}>
+          <Pressable style={styles.imagePreviewClose} onPress={() => setPreviewImage(null)}>
+            <Ionicons name="close" size={26} color={COLORS.text} />
+          </Pressable>
+          {previewImage && <Image source={{ uri: previewImage }} style={styles.imagePreview} resizeMode="contain" />}
+        </View>
+      </Modal>
 
       <View style={styles.actionRow}>
         <Pressable
@@ -1245,6 +1350,84 @@ function SpendingTrendScreen({
   );
 }
 
+function YearStatsScreen({
+  navigation,
+  data,
+}: NativeStackScreenProps<RootStackParamList, "YearStats"> & {
+  data: AppData;
+}) {
+  const [year, setYear] = useState(TODAY.getFullYear());
+  const buckets = yearBuckets(data.transactions, year);
+  const max = Math.max(...buckets.map((item) => item.expense), 1);
+
+  return (
+    <Screen title="Thống kê năm" subtitle={`Năm ${year}`} profile={{ name: "", initials: "" }}>
+      <GlassCard>
+        <View style={styles.rowBetween}>
+          <IconButton icon="chevron-back" onPress={() => setYear((current) => current - 1)} />
+          <Text style={styles.cardTitle}>{year}</Text>
+          <IconButton icon="chevron-forward" onPress={() => setYear((current) => current + 1)} />
+        </View>
+        <View style={styles.monthBars}>
+          {buckets.map((item) => (
+            <View key={item.label} style={styles.monthBarItem}>
+              <Text style={styles.barValue}>{formatCompact(item.expense)}</Text>
+              <View style={styles.monthBarTrack}>
+                <View style={[styles.monthBar, { height: Math.max(10, (item.expense / max) * 120) }]} />
+              </View>
+              <Text style={styles.chartLabel}>{item.label}</Text>
+            </View>
+          ))}
+        </View>
+      </GlassCard>
+      <GlassCard>
+        <Text style={styles.cardTitle}>Smart Insight AI</Text>
+        <Text style={styles.emptyText}>{buildSmartInsight(data.transactions.filter((item) => new Date(item.date).getFullYear() === year), "year")}</Text>
+      </GlassCard>
+      <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
+        <Text style={styles.secondaryActionText}>Quay lại</Text>
+      </Pressable>
+    </Screen>
+  );
+}
+
+function TodayTransactionsScreen({
+  navigation,
+  data,
+  categoriesById,
+  deleteTransaction,
+}: NativeStackScreenProps<RootStackParamList, "TodayTransactions"> & {
+  data: AppData;
+  categoriesById: Record<string, Category>;
+  deleteTransaction: (transactionId: string) => void;
+}) {
+  const todayItems = data.transactions.filter((item) => isoDate(new Date(item.date)) === isoDate(TODAY));
+
+  return (
+    <Screen title="Thu chi hôm nay" subtitle={formatDate(TODAY.toISOString())} profile={{ name: "", initials: "" }}>
+      <GlassCard>
+        {todayItems.length === 0 ? (
+          <Text style={styles.emptyText}>Hôm nay chưa có giao dịch.</Text>
+        ) : (
+          todayItems.map((item) => (
+            <TransactionSwipeRow
+              key={item.id}
+              transaction={item}
+              category={categoriesById[item.categoryId]}
+              onPress={() => navigation.navigate("TransactionDetail", { transactionId: item.id })}
+              onEdit={() => navigation.navigate("TransactionEditor", { transactionId: item.id })}
+              onDelete={() => deleteTransaction(item.id)}
+            />
+          ))
+        )}
+      </GlassCard>
+      <Pressable style={styles.secondaryAction} onPress={() => navigation.goBack()}>
+        <Text style={styles.secondaryActionText}>Quay lại</Text>
+      </Pressable>
+    </Screen>
+  );
+}
+
 function CategoriesScreen({
   navigation,
   categories,
@@ -1257,9 +1440,9 @@ function CategoriesScreen({
 }) {
   const [type, setType] = useState<TransactionType>("expense");
   const [name, setName] = useState("");
-  const iconOptions = type === "expense" ? ["restaurant", "cart", "car", "home", "gift"] : ["wallet", "cash", "trophy", "trending-up", "briefcase"];
+  const iconOptions = CATEGORY_ICONS;
   const colorOptions = type === "expense" ? ["#FA9B00", "#FF7A7A", "#8CB6FF", "#C2A4FF"] : ["#79B5FF", "#7CD992", "#D4AF37", "#AEB4C2"];
-  const [icon, setIcon] = useState(iconOptions[0]);
+  const [icon, setIcon] = useState<string>(iconOptions[0]);
   const [color, setColor] = useState(colorOptions[0]);
 
   useEffect(() => {
@@ -1418,6 +1601,7 @@ function TransactionForm({
   const [images, setImages] = useState<string[]>(existing?.images ?? []);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState("");
+  const [categoryIconDraft, setCategoryIconDraft] = useState<string>(CATEGORY_ICONS[0]);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
   const categories = data.categories.filter((item) => item.type === type);
@@ -1474,6 +1658,7 @@ function TransactionForm({
             onPress={() => {
               setEditingCategory(null);
               setCategoryDraft("");
+              setCategoryIconDraft(type === "income" ? "cash" : "restaurant");
               setCategoryModalOpen(true);
             }}
           >
@@ -1490,6 +1675,7 @@ function TransactionForm({
                 onLongPress={() => {
                   setEditingCategory(item);
                   setCategoryDraft(item.name);
+                  setCategoryIconDraft(item.icon);
                   setCategoryModalOpen(true);
                 }}
               >
@@ -1584,6 +1770,19 @@ function TransactionForm({
               placeholderTextColor={COLORS.muted}
               style={styles.input}
             />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.iconGrid}>
+                {CATEGORY_ICONS.map((iconName) => (
+                  <Pressable
+                    key={iconName}
+                    style={[styles.iconChoice, categoryIconDraft === iconName && styles.iconChoiceActive]}
+                    onPress={() => setCategoryIconDraft(iconName)}
+                  >
+                    <Ionicons name={iconName as any} size={20} color={categoryIconDraft === iconName ? "#07162F" : COLORS.text} />
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
             <Pressable
               style={styles.primaryAction}
               onPress={() => {
@@ -1594,7 +1793,7 @@ function TransactionForm({
                   id: editingCategory?.id,
                   name: categoryDraft.trim(),
                   type,
-                  icon: editingCategory?.icon ?? (type === "income" ? "cash" : "ellipsis-horizontal-circle"),
+                  icon: categoryIconDraft,
                   color: editingCategory?.color ?? (type === "income" ? COLORS.income : COLORS.expense),
                 });
                 setCategoryModalOpen(false);
@@ -1784,8 +1983,8 @@ function Avatar({ initials, size = 40 }: { initials: string; size?: number }) {
   );
 }
 
-function GlassCard({ children }: { children: React.ReactNode }) {
-  return <View style={styles.glassCard}>{children}</View>;
+function GlassCard({ children, style }: { children: React.ReactNode; style?: object }) {
+  return <View style={[styles.glassCard, style]}>{children}</View>;
 }
 
 function MetricCard({
@@ -1800,13 +1999,110 @@ function MetricCard({
   icon: keyof typeof Ionicons.glyphMap;
 }) {
   return (
-    <GlassCard>
+    <GlassCard style={styles.metricCard}>
       <View style={[styles.metricIcon, { backgroundColor: `${accent}22` }]}>
         <Ionicons name={icon} size={18} color={accent} />
       </View>
       <Text style={styles.transactionMeta}>{label}</Text>
       <Text style={styles.metricValue}>{value}</Text>
     </GlassCard>
+  );
+}
+
+function TransactionSwipeRow({
+  transaction,
+  category,
+  onPress,
+  onEdit,
+  onDelete,
+  onLongPress,
+}: {
+  transaction: Transaction;
+  category?: Category;
+  onPress: () => void;
+  onEdit: () => void;
+  onDelete?: () => void;
+  onLongPress?: () => void;
+}) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={320} decelerationRate="fast">
+      <Pressable style={styles.transactionRowWide} onPress={onPress} onLongPress={onLongPress}>
+        <CategoryIcon category={category} />
+        <View style={styles.transactionTextBlock}>
+          <Text style={styles.transactionTitle}>{category?.name ?? "Danh mục"}</Text>
+          <Text style={styles.transactionMeta}>
+            {transaction.note || "Không có ghi chú"} · {formatDateTime(transaction.date)}
+          </Text>
+        </View>
+        <Text style={[styles.transactionAmount, transaction.type === "income" ? styles.amountIncome : styles.amountExpense]}>
+          {transaction.type === "income" ? "+" : "-"}{formatCompact(transaction.amount)}
+        </Text>
+      </Pressable>
+      <View style={styles.swipeActions}>
+        <Pressable style={styles.swipeEdit} onPress={onEdit}>
+          <Ionicons name="create-outline" size={18} color="#07162F" />
+        </Pressable>
+        {onDelete && (
+          <Pressable style={styles.swipeDelete} onPress={onDelete}>
+            <Ionicons name="trash-outline" size={18} color={COLORS.text} />
+          </Pressable>
+        )}
+      </View>
+    </ScrollView>
+  );
+}
+
+function CurrencyConverterCard() {
+  const [amount, setAmount] = useState("100");
+  const [from, setFrom] = useState("USD");
+  const [to, setTo] = useState("VND");
+  const converted = convertCurrency(Number(amount) || 0, from, to);
+  const codes = Object.keys(CURRENCY_RATES);
+
+  return (
+    <GlassCard>
+      <Text style={styles.cardTitle}>Chuyển đổi tiền tệ</Text>
+      <TextInput
+        value={amount}
+        onChangeText={(text) => setAmount(text.replace(/[^\d.]/g, ""))}
+        keyboardType="decimal-pad"
+        placeholder="Số tiền"
+        placeholderTextColor={COLORS.muted}
+        style={styles.input}
+      />
+      <View style={styles.currencyRow}>
+        <CurrencyPicker value={from} codes={codes} onChange={setFrom} />
+        <Ionicons name="arrow-forward" size={18} color={COLORS.muted} />
+        <CurrencyPicker value={to} codes={codes} onChange={setTo} />
+      </View>
+      <Text style={styles.metricValue}>{formatNumber(converted)} {to}</Text>
+      <Text style={styles.transactionMeta}>Tỉ giá tham khảo theo ngày</Text>
+      <View style={styles.rateGrid}>
+        {codes.filter((code) => code !== "USD").map((code) => (
+          <Text key={code} style={styles.rateText}>1 USD = {formatNumber(CURRENCY_RATES[code])} {code}</Text>
+        ))}
+      </View>
+    </GlassCard>
+  );
+}
+
+function CurrencyPicker({
+  value,
+  codes,
+  onChange,
+}: {
+  value: string;
+  codes: string[];
+  onChange: (value: string) => void;
+}) {
+  const currentIndex = codes.indexOf(value);
+  return (
+    <Pressable
+      style={styles.accountChip}
+      onPress={() => onChange(codes[(currentIndex + 1) % codes.length])}
+    >
+      <Text style={styles.accountChipText}>{value}</Text>
+    </Pressable>
   );
 }
 
@@ -2014,6 +2310,15 @@ function formatCompact(value: number) {
   }).format(value);
 }
 
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value);
+}
+
+function convertCurrency(amount: number, from: string, to: string) {
+  const usd = amount / (CURRENCY_RATES[from] ?? 1);
+  return usd * (CURRENCY_RATES[to] ?? 1);
+}
+
 function formatInputAmount(value: string) {
   const digits = value.replace(/[^\d]/g, "");
   if (!digits) {
@@ -2021,6 +2326,70 @@ function formatInputAmount(value: string) {
   }
 
   return `${new Intl.NumberFormat("vi-VN").format(Number(digits))}đ`;
+}
+
+function searchTransactions(transactions: Transaction[], categories: Category[], query: string) {
+  const lower = query.trim().toLowerCase();
+  const categoryMap = Object.fromEntries(categories.map((item) => [item.id, item.name.toLowerCase()]));
+  const threshold = parseAmountQuery(lower);
+  const monthOffset = lower.includes("tháng trước") ? -1 : lower.includes("tháng này") ? 0 : undefined;
+
+  return transactions.filter((item) => {
+    const date = new Date(item.date);
+    const textMatch = [item.note, categoryMap[item.categoryId] ?? "", item.account]
+      .join(" ")
+      .toLowerCase()
+      .includes(lower);
+    const amountMatch = threshold ? item.amount >= threshold : false;
+    const monthMatch =
+      monthOffset === undefined
+        ? false
+        : sameMonth(date, new Date(TODAY.getFullYear(), TODAY.getMonth() + monthOffset, 1));
+
+    return textMatch || amountMatch || monthMatch;
+  });
+}
+
+function parseAmountQuery(query: string) {
+  const match = query.match(/(?:trên|hon|hơn|>)\s*(\d+(?:[.,]\d+)?)(k|tr|m|triệu)?/);
+  if (!match) {
+    return undefined;
+  }
+  const raw = Number(match[1].replace(",", "."));
+  const unit = match[2];
+  if (unit === "k") return raw * 1000;
+  if (unit === "tr" || unit === "m" || unit === "triệu") return raw * 1000000;
+  return raw;
+}
+
+function predictMonthlyExpense(transactions: Transaction[]) {
+  const monthExpenses = transactions.filter(
+    (item) => item.type === "expense" && sameMonth(new Date(item.date), TODAY)
+  );
+  const spent = monthExpenses.reduce((sum, item) => sum + item.amount, 0);
+  const day = TODAY.getDate();
+  const daysInMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0).getDate();
+  const averageDaily = day === 0 ? 0 : spent / day;
+  return spent + averageDaily * (daysInMonth - day);
+}
+
+function buildSmartInsight(transactions: Transaction[], scope: "week" | "month" | "year") {
+  const expenses = transactions.filter((item) => item.type === "expense");
+  const income = transactions.filter((item) => item.type === "income");
+  const expenseTotal = expenses.reduce((sum, item) => sum + item.amount, 0);
+  const incomeTotal = income.reduce((sum, item) => sum + item.amount, 0);
+  const balance = incomeTotal - expenseTotal;
+  const label = scope === "week" ? "tuần này" : scope === "month" ? "tháng này" : "năm này";
+
+  if (expenses.length === 0 && income.length === 0) {
+    return `Chưa đủ dữ liệu ${label} để nhận xét.`;
+  }
+
+  if (balance >= 0) {
+    return `Smart Insight AI: ${label} đang dương ${formatCurrency(balance)}. Tốc độ chi hiện vẫn thấp hơn thu.`;
+  }
+
+  return `Smart Insight AI: ${label} đang âm ${formatCurrency(Math.abs(balance))}. Nên giảm các khoản chi không cố định.`;
 }
 
 function formatDate(value: string) {
@@ -2114,19 +2483,16 @@ function trendMax(trend: { key: string; label: string; value: number }[]) {
 }
 
 function buildCalendar(monthDate: Date, transactions: Transaction[]) {
-  const start = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-  const firstDay = (start.getDay() + 6) % 7;
-  start.setDate(start.getDate() - firstDay);
+  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
 
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const date = new Date(monthDate.getFullYear(), monthDate.getMonth(), index + 1);
     const key = isoDate(date);
     const dailyItems = transactions.filter((item) => isoDate(new Date(item.date)) === key);
 
     return {
       date,
-      inMonth: date.getMonth() === monthDate.getMonth(),
+      inMonth: true,
       income: dailyItems.filter((item) => item.type === "income").length,
       expense: dailyItems.filter((item) => item.type === "expense").length,
     };
@@ -2158,6 +2524,18 @@ function monthBuckets(transactions: Transaction[]) {
     return {
       label: `T${cursor.getMonth() + 1}`,
       total,
+    };
+  });
+}
+
+function yearBuckets(transactions: Transaction[], year: number) {
+  return Array.from({ length: 12 }, (_, index) => {
+    const cursor = new Date(year, index, 1);
+    const monthly = transactions.filter((item) => sameMonth(new Date(item.date), cursor));
+    return {
+      label: `T${index + 1}`,
+      expense: sumByType(monthly, "expense"),
+      income: sumByType(monthly, "income"),
     };
   });
 }
@@ -2458,6 +2836,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
   },
+  metricCard: {
+    flex: 1,
+    minHeight: 126,
+  },
   metricIcon: {
     width: 40,
     height: 40,
@@ -2480,6 +2862,14 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 4,
   },
+  transactionRowWide: {
+    width: 318,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 8,
+    paddingRight: 10,
+  },
   transactionTextBlock: {
     flex: 1,
   },
@@ -2496,6 +2886,28 @@ const styles = StyleSheet.create({
   transactionAmount: {
     color: COLORS.text,
     fontWeight: "700",
+  },
+  swipeActions: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    paddingRight: 8,
+  },
+  swipeEdit: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.primary,
+  },
+  swipeDelete: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.error,
   },
   amountIncome: {
     color: COLORS.income,
@@ -2821,6 +3233,28 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: COLORS.surface3,
   },
+  imagePreviewOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.94)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  imagePreview: {
+    width: "100%",
+    height: "84%",
+  },
+  imagePreviewClose: {
+    position: "absolute",
+    top: 54,
+    right: 22,
+    zIndex: 2,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
   trend30Row: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -2843,6 +3277,18 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: 12,
     backgroundColor: COLORS.primary,
+  },
+  currencyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  rateGrid: {
+    gap: 6,
+  },
+  rateText: {
+    color: COLORS.muted,
+    fontSize: 13,
   },
   profileCard: {
     flexDirection: "row",
@@ -2909,6 +3355,11 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderWidth: 1,
     borderColor: "transparent",
+  },
+  iconGrid: {
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 4,
   },
   iconChoiceActive: {
     backgroundColor: COLORS.primary,
