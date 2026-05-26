@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Sổ Thu Chi",
+    "slug": "thu-chi-mobile-rn-sdk54",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.newbie2l05.thuchi",
+      "adaptiveIcon": {
+        "backgroundColor": "#131315"
+      }
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-document-picker",
+      "expo-image-picker",
+      "expo-font"
+    ]
+  }
+}
