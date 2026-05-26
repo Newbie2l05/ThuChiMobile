@@ -101,9 +101,9 @@ type AppData = {
 
 type RootStackParamList = {
   Tabs: undefined;
-  TransactionEditor: { transactionId?: string; defaultType?: TransactionType } | undefined;
+  TransactionEditor: { transactionId?: string; defaultType?: TransactionType; defaultDate?: string } | undefined;
   TransactionDetail: { transactionId: string };
-  Categories: undefined;
+  Categories: { categoryId?: string } | undefined;
   ChangePin: undefined;
   Wallets: undefined;
   SpendingTrend: undefined;
@@ -1018,14 +1018,24 @@ function CalendarScreen({
   const navigation = useNavigation<any>();
   const [selectedDate, setSelectedDate] = useState(startOfDay(TODAY));
   const [monthCursor, setMonthCursor] = useState(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1));
+  const [yearPickerOpen, setYearPickerOpen] = useState(false);
 
   const days = buildCalendar(monthCursor, data.transactions);
   const selectedKey = isoDate(selectedDate);
   const items = data.transactions.filter((item) => isoDate(new Date(item.date)) === selectedKey);
+  const yearOptions = Array.from({ length: 11 }, (_, index) => monthCursor.getFullYear() - 5 + index);
   const changeMonth = (offset: number) => {
     const nextMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + offset, 1);
     setMonthCursor(nextMonth);
     setSelectedDate(nextMonth);
+  };
+  const addTransactionForDate = (date: Date) => {
+    const defaultDate = isoDate(date);
+    Alert.alert("Thêm giao dịch", `Ngày ${formatDate(date.toISOString())}`, [
+      { text: "Chi tiêu", onPress: () => navigation.navigate("TransactionEditor", { defaultType: "expense", defaultDate }) },
+      { text: "Thu nhập", onPress: () => navigation.navigate("TransactionEditor", { defaultType: "income", defaultDate }) },
+      { text: "Hủy", style: "cancel" },
+    ]);
   };
 
   return (
@@ -1033,7 +1043,9 @@ function CalendarScreen({
       <GlassCard>
         <View style={styles.rowBetween}>
           <IconButton icon="chevron-back" onPress={() => changeMonth(-1)} />
-          <Text style={styles.cardTitle}>{monthLabel(monthCursor)}</Text>
+          <Pressable onPress={() => setYearPickerOpen(true)}>
+            <Text style={styles.cardTitle}>{monthLabel(monthCursor)}</Text>
+          </Pressable>
           <IconButton icon="chevron-forward" onPress={() => changeMonth(1)} />
         </View>
 
@@ -1051,6 +1063,7 @@ function CalendarScreen({
                 key={day.date.toISOString()}
                 style={[styles.dayCell, active && styles.dayCellActive]}
                 onPress={() => setSelectedDate(day.date)}
+                onLongPress={() => addTransactionForDate(day.date)}
               >
                 <Text style={[styles.dayLabel, active && styles.dayLabelActive]}>
                   {day.date.getDate()}
@@ -1093,6 +1106,29 @@ function CalendarScreen({
           ))
         )}
       </GlassCard>
+      <Modal visible={yearPickerOpen} transparent animationType="fade" onRequestClose={() => setYearPickerOpen(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setYearPickerOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.cardTitle}>Chọn năm</Text>
+            {yearOptions.map((year) => (
+              <Pressable
+                key={year}
+                style={styles.currencyOption}
+                onPress={() => {
+                  const next = new Date(year, monthCursor.getMonth(), 1);
+                  setMonthCursor(next);
+                  setSelectedDate(next);
+                  setYearPickerOpen(false);
+                }}
+              >
+                <Text style={[styles.transactionTitle, year === monthCursor.getFullYear() && { color: COLORS.primary }]}>
+                  {year}
+                </Text>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -1175,7 +1211,7 @@ function ReportsScreen({
           <Text style={styles.emptyText}>Chưa có dữ liệu.</Text>
         ) : (
           currentExpense.map((item) => (
-            <View key={item.categoryId} style={styles.reportRow}>
+            <Pressable key={item.categoryId} style={styles.reportRow} onPress={() => navigation.navigate("Categories", { categoryId: item.categoryId })}>
               <View style={styles.reportLeft}>
                 <CategoryIcon category={categoriesById[item.categoryId]} compact />
                 <View>
@@ -1184,7 +1220,7 @@ function ReportsScreen({
                 </View>
               </View>
               <Text style={styles.transactionAmount}>{formatCurrency(item.total)}</Text>
-            </View>
+            </Pressable>
           ))
         )}
       </GlassCard>
@@ -1241,7 +1277,19 @@ function MoreScreen({
   const navigation = useNavigation<any>();
   const [premiumCode, setPremiumCode] = useState("");
   const [modalTarget, setModalTarget] = useState<'language' | 'currency' | null>(null);
-  const codes = Object.keys(CURRENCY_RATES);
+  const codes = ["VND", "USD"];
+  const updateLanguage = (language: "vi" | "en") => {
+    animateNext();
+    setGlobalFormatting(data.currency, language);
+    setData((current) => ({ ...current, language }));
+    setModalTarget(null);
+  };
+  const updateCurrency = (currency: string) => {
+    animateNext();
+    setGlobalFormatting(currency, data.language);
+    setData((current) => ({ ...current, currency }));
+    setModalTarget(null);
+  };
 
   return (
     <Screen title={t("Khác")} subtitle={t("Cài đặt, dữ liệu và bảo mật")} profile={data.profile}>
@@ -1340,16 +1388,16 @@ function MoreScreen({
             <ScrollView style={{ maxHeight: 300 }}>
               {modalTarget === 'language' ? (
                 <>
-                  <Pressable style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: COLORS.border }} onPress={() => { animateNext(); setData((c) => ({ ...c, language: 'vi' })); setModalTarget(null); }}>
+                  <Pressable style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: COLORS.border }} onPress={() => updateLanguage('vi')}>
                     <Text style={[styles.label, { fontSize: 16 }, data.language === 'vi' && { color: COLORS.primary, fontWeight: '700' }]}>Tiếng Việt</Text>
                   </Pressable>
-                  <Pressable style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: COLORS.border }} onPress={() => { animateNext(); setData((c) => ({ ...c, language: 'en' })); setModalTarget(null); }}>
+                  <Pressable style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: COLORS.border }} onPress={() => updateLanguage('en')}>
                     <Text style={[styles.label, { fontSize: 16 }, data.language === 'en' && { color: COLORS.primary, fontWeight: '700' }]}>English</Text>
                   </Pressable>
                 </>
               ) : (
                 codes.map((code) => (
-                  <Pressable key={code} style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: COLORS.border }} onPress={() => { animateNext(); setData((c) => ({ ...c, currency: code })); setModalTarget(null); }}>
+                  <Pressable key={code} style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: COLORS.border }} onPress={() => updateCurrency(code)}>
                     <Text style={[styles.label, { fontSize: 16 }, data.currency === code && { color: COLORS.primary, fontWeight: '700' }]}>{code}</Text>
                   </Pressable>
                 ))
@@ -1387,6 +1435,7 @@ function TransactionEditorScreen({
         deleteCategory={deleteCategory}
         transactionId={route.params?.transactionId}
         defaultType={route.params?.defaultType}
+        defaultDate={route.params?.defaultDate}
         onSaved={() => navigation.goBack()}
       />
     </Screen>
@@ -2069,6 +2118,7 @@ function RecurringTransactionsScreen({
 }
 
 function CategoriesScreen({
+  route,
   navigation,
   categories,
   saveCategory,
@@ -2086,11 +2136,36 @@ function CategoriesScreen({
   const colorOptions = CATEGORY_COLORS;
   const [icon, setIcon] = useState<string>(iconOptions[0]);
   const [color, setColor] = useState(colorOptions[0]);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (editingId) return;
     setIcon(iconOptions[0]);
     setColor(colorOptions[0]);
-  }, [type]);
+  }, [type, editingId, iconOptions, colorOptions]);
+
+  const startEditCategory = (category: Category) => {
+    setEditingId(category.id);
+    setType(category.type);
+    setName(category.name);
+    setIcon(category.icon);
+    setColor(category.color);
+  };
+
+  const resetCategoryForm = () => {
+    setEditingId(null);
+    setName("");
+    setIcon(iconOptions[0]);
+    setColor(colorOptions[0]);
+  };
+
+  useEffect(() => {
+    const targetId = route.params?.categoryId;
+    const target = targetId ? categories.find((item) => item.id === targetId) : undefined;
+    if (target) {
+      startEditCategory(target);
+    }
+  }, [route.params?.categoryId, categories]);
 
   const filtered = categories.filter((item) => item.type === type);
 
@@ -2102,7 +2177,7 @@ function CategoriesScreen({
       </View>
 
       <GlassCard>
-        <Text style={styles.cardTitle}>Tạo danh mục mới</Text>
+        <Text style={styles.cardTitle}>{editingId ? "Sửa danh mục" : "Tạo danh mục mới"}</Text>
         <TextInput
           style={styles.input}
           placeholder="Tên danh mục"
@@ -2131,26 +2206,44 @@ function CategoriesScreen({
               return;
             }
 
-            saveCategory({ name: name.trim(), type, icon, color });
-            setName("");
+            saveCategory({ id: editingId ?? undefined, name: name.trim(), type, icon, color });
+            resetCategoryForm();
           }}
         >
-          <Text style={styles.primaryActionText}>{t("Thêm danh mục")}</Text>
+          <Text style={styles.primaryActionText}>{editingId ? "Lưu danh mục" : t("Thêm danh mục")}</Text>
         </Pressable>
+        {editingId && (
+          <Pressable style={styles.secondaryAction} onPress={resetCategoryForm}>
+            <Text style={styles.secondaryActionText}>Hủy sửa</Text>
+          </Pressable>
+        )}
       </GlassCard>
 
       <GlassCard>
         <Text style={styles.cardTitle}>Danh sách hiện có</Text>
         {filtered.map((item) => (
-          <ScrollView key={item.id} horizontal showsHorizontalScrollIndicator={false} snapToInterval={320} decelerationRate="fast">
-            <View style={styles.transactionRowWide}>
+          <ScrollView
+            key={item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={320}
+            decelerationRate="fast"
+            directionalLockEnabled
+            bounces={false}
+            overScrollMode="never"
+            scrollEventThrottle={16}
+          >
+            <Pressable style={styles.transactionRowWide} onPress={() => startEditCategory(item)}>
               <CategoryIcon category={item} />
               <View style={styles.transactionTextBlock}>
                 <Text style={styles.transactionTitle}>{item.name}</Text>
                 <Text style={styles.transactionMeta}>{item.type === "income" ? "Thu nhập" : "Chi tiêu"}</Text>
               </View>
-            </View>
+            </Pressable>
             <View style={styles.swipeActions}>
+              <Pressable style={styles.swipeEdit} onPress={() => startEditCategory(item)}>
+                <Ionicons name="create-outline" size={18} color={COLORS.text} />
+              </Pressable>
               <Pressable style={styles.swipeDelete} onPress={() => deleteCategory(item.id)}>
                 <Ionicons name="trash-outline" size={18} color={COLORS.text} />
               </Pressable>
@@ -2227,6 +2320,7 @@ function TransactionForm({
   deleteCategory,
   transactionId,
   defaultType,
+  defaultDate,
   onSaved,
 }: {
   data: AppData;
@@ -2235,6 +2329,7 @@ function TransactionForm({
   deleteCategory: (categoryId: string) => void;
   transactionId?: string;
   defaultType?: TransactionType;
+  defaultDate?: string;
   onSaved: () => void;
 }) {
   const styles = useAppStyles();
@@ -2247,7 +2342,7 @@ function TransactionForm({
   );
   const [note, setNote] = useState(existing?.note ?? "");
   const [account, setAccount] = useState(resolveWalletId(data.wallets, existing?.account) ?? data.wallets[0]?.id ?? "cash");
-  const [date, setDate] = useState(existing ? isoDate(new Date(existing.date)) : isoDate(TODAY));
+  const [date, setDate] = useState(existing ? isoDate(new Date(existing.date)) : defaultDate ?? isoDate(TODAY));
   const [images, setImages] = useState<string[]>(existing?.images ?? []);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState("");
@@ -2618,9 +2713,15 @@ function Screen({
   const COLORS = useAppColors();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const canGoBack = navigation.canGoBack();
   const content = (
     <View style={styles.screenInner}>
       <View style={[styles.screenHeader, { paddingTop: insets.top + 8 }]}>
+        {canGoBack && (
+          <Pressable style={styles.headerSearchButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={22} color={COLORS.text} />
+          </Pressable>
+        )}
         <View style={styles.headerTextWrap}>
           <Text style={styles.headerSubtitle}>{subtitle}</Text>
           <Text style={styles.headerTitle}>{title}</Text>
@@ -2707,7 +2808,16 @@ function TransactionSwipeRow({
   const styles = useAppStyles();
   const COLORS = useAppColors();
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={320} decelerationRate="fast">
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      snapToInterval={320}
+      decelerationRate="fast"
+      directionalLockEnabled
+      bounces={false}
+      overScrollMode="never"
+      scrollEventThrottle={16}
+    >
       <Pressable style={styles.transactionRowWide} onPress={onPress} onLongPress={onLongPress}>
         <CategoryIcon category={category} />
         <View style={styles.transactionTextBlock}>
@@ -2998,8 +3108,8 @@ function normalizeData(input: Partial<AppData>): AppData {
     wallets: input.wallets?.length ? input.wallets : INITIAL_DATA.wallets,
     budgets: input.budgets?.length ? input.budgets : INITIAL_DATA.budgets,
     recurringTransactions: input.recurringTransactions?.length ? input.recurringTransactions : INITIAL_DATA.recurringTransactions,
-    currency: input.currency ?? "VND",
-    language: input.language ?? "vi",
+    currency: input.currency === "USD" ? "USD" : "VND",
+    language: input.language === "en" ? "en" : "vi",
     requirePinOnResume: input.requirePinOnResume ?? false,
     isPremium: input.isPremium ?? false,
     themeMode: input.themeMode ?? "dark",
