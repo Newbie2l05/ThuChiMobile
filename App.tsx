@@ -3,9 +3,7 @@ import "react-native-gesture-handler";
 import React, { useEffect, useRef, useState, createContext, useContext, useMemo } from "react";
 import {
   Alert,
-  Animated,
   AppState,
-  Easing,
   Image,
   LayoutAnimation,
   Modal,
@@ -2833,32 +2831,12 @@ function TabIcon({
   focused: boolean;
 }) {
   const styles = useAppStyles();
-  const COLORS = useAppColors();
-  const progress = useRef(new Animated.Value(focused ? 1 : 0)).current;
-
-  useEffect(() => {
-    Animated.timing(progress, {
-      toValue: focused ? 1 : 0,
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [focused, progress]);
-
-  const scale = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.08],
-  });
-  const translateY = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -2],
-  });
 
   return (
-    <Animated.View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive, { transform: [{ scale }, { translateY }] }]}>
+    <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive, focused && styles.tabIconWrapFocused]}>
       <Ionicons name={icon} size={18} color={color} />
       <Text style={[styles.tabLabel, { color }]}>{label}</Text>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -3891,6 +3869,9 @@ const createStyles = (COLORS: typeof DARK_COLORS) => StyleSheet.create({
   },
   tabIconWrapActive: {
     backgroundColor: COLORS.surface2,
+  },
+  tabIconWrapFocused: {
+    transform: [{ scale: 1.04 }, { translateY: -1 }],
   },
   tabLabel: {
     fontSize: 9,
